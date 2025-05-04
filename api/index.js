@@ -5,7 +5,7 @@
  * GitHub Repository: https://github.com/wozulong/open-wegram-bot
  */
 
-import {handleRequest} from '../src/core.js';
+import { handleRequest } from '../src/core.js';
 
 export default async function handler(req, res) {
     const request = new Request(`${req.headers['x-forwarded-proto']}://${req.headers.host}${req.url}`, {
@@ -16,7 +16,9 @@ export default async function handler(req, res) {
 
     const config = {
         prefix: process.env.PREFIX || 'public',
-        secretToken: process.env.SECRET_TOKEN || ''
+        secretToken: process.env.SECRET_TOKEN || '',
+        childBotUrl: process.env.CHILD_BOT_URL || '',
+        childBotSecretToken: process.env.CHILD_BOT_SECRET_TOKEN || ''
     };
 
     const response = await handleRequest(request, config);

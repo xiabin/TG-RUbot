@@ -2,6 +2,16 @@
  * Open Wegram Bot - Core Logic
  * Shared code between Cloudflare Worker and Vercel deployments
  */
+import {
+    checkInit,
+    doCheckInit,
+    init,
+    motherBotCommands,
+    parseMetaDataMessage,
+    processPMReceived,
+    processPMSent,
+    reset
+} from './topicPmHandler.js'
 
 export function validateSecretToken(token) {
     return token.length > 15 && /[A-Z]/.test(token) && /[a-z]/.test(token) && /[0-9]/.test(token);
@@ -74,7 +84,7 @@ export async function handleUninstall(botToken, secretToken) {
     }
 }
 
-export async function handleWebhook(request, ownerUid, botToken, secretToken) {
+export async function handleWebhook(request, ownerUid, botToken, secretToken, childBotUrl, childBotSecretToken) {
     if (secretToken !== request.headers.get('X-Telegram-Bot-Api-Secret-Token')) {
         return new Response('Unauthorized', {status: 401});
     }
@@ -83,11 +93,62 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken) {
     if (!update.message) {
         return new Response('OK');
     }
-
     const message = update.message;
+    const fromChat = message.chat;
+
+    if (childBotUrl) {
+        // --- delivery children bots ---
+        return await motherBotCommands(botToken, ownerUid, message, childBotUrl, childBotSecretToken);
+    }
+
+    // --- commands ---
+    if (message.from.id.toString() === ownerUid && fromChat.is_forum && !message.is_topic_message) {
+        // --- commands in General topic ---
+        if (message.text === ".!pm_RUbot_checkInit!.") {
+            return await checkInit(botToken, ownerUid, message);
+        } else if (message.text === ".!pm_RUbot_doInit!.") {
+            return await init(botToken, ownerUid, message);
+        } else if (message.text === ".!pm_RUbot_doReset!.") {
+            return await reset(botToken, ownerUid, message, false);
+        }
+        return new Response('OK');
+    } else if (message.from.id.toString() === ownerUid && fromChat.id.toString() === ownerUid) {
+        // --- commands in Owner Chat ---
+        if (message.text === ".!pm_RUbot_doReset!.") {
+            return await reset(botToken, ownerUid, message, true);
+        }
+    }
+    // --- commands ---
+
     const reply = message.reply_to_message;
     try {
-        if (reply && message.chat.id.toString() === ownerUid) {
+        if ("/start" === message.text) {
+            return new Response('OK');
+        }
+
+        const check = await doCheckInit(botToken, ownerUid)
+        if (!check.failed) {
+            const metaDataMessage = check.checkMetaDataMessageResp.result.pinned_message;
+            const {
+                superGroupChatId,
+                topicToFromChat,
+                fromChatToTopic
+            } = parseMetaDataMessage(metaDataMessage);
+            if (message.forum_topic_created || message.pinned_message) {
+                // ignore message types
+                return new Response('OK');
+            } else if (message.from.id.toString() === ownerUid && fromChat.id === superGroupChatId
+                && fromChat.is_forum && message.is_topic_message) {
+                // topic PM SEND to others
+                await processPMSent(botToken, message, topicToFromChat);
+            } else {
+                // topic PM receive from others. Always receive first.
+                await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, metaDataMessage);
+            }
+            return new Response('OK');
+        }
+
+        if (reply && fromChat.id.toString() === ownerUid) {
             const rm = reply.reply_markup;
             if (rm && rm.inline_keyboard && rm.inline_keyboard.length > 0) {
                 let senderUid = rm.inline_keyboard[0][0].callback_data;
@@ -97,7 +158,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken) {
 
                 await postToTelegramApi(botToken, 'copyMessage', {
                     chat_id: parseInt(senderUid),
-                    from_chat_id: message.chat.id,
+                    from_chat_id: fromChat.id,
                     message_id: message.message_id
                 });
             }
@@ -105,11 +166,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken) {
             return new Response('OK');
         }
 
-        if ("/start" === message.text) {
-            return new Response('OK');
-        }
-
-        const sender = message.chat;
+        const sender = fromChat;
         const senderUid = sender.id.toString();
         const senderName = sender.username ? `@${sender.username}` : [sender.first_name, sender.last_name].filter(Boolean).join(' ');
 
@@ -126,7 +183,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken) {
 
             return await postToTelegramApi(botToken, 'copyMessage', {
                 chat_id: parseInt(ownerUid),
-                from_chat_id: message.chat.id,
+                from_chat_id: fromChat.id,
                 message_id: message.message_id,
                 reply_markup: {inline_keyboard: ik}
             });
@@ -139,13 +196,18 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken) {
 
         return new Response('OK');
     } catch (error) {
-        console.error('Error handling webhook:', error);
-        return new Response('Internal Server Error', {status: 500});
+        // --- for debug ---
+        await postToTelegramApi(botToken, 'sendMessage', {
+            chat_id: ownerUid,
+            text: `Error! You can send the message to developer for getting help : ${error.message} origin: ${JSON.stringify(update)}`,
+        });
+        // --- for debug ---
+        return new Response('OK');
     }
 }
 
 export async function handleRequest(request, config) {
-    const {prefix, secretToken} = config;
+    const { prefix, secretToken, childBotUrl, childBotSecretToken } = config;
 
     const url = new URL(request.url);
     const path = url.pathname;
@@ -165,7 +227,7 @@ export async function handleRequest(request, config) {
     }
 
     if (match = path.match(WEBHOOK_PATTERN)) {
-        return handleWebhook(request, match[1], match[2], secretToken);
+        return handleWebhook(request, match[1], match[2], secretToken, childBotUrl, childBotSecretToken);
     }
 
     return new Response('Not Found', {status: 404});
