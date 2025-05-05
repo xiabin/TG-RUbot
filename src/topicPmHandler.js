@@ -1,6 +1,7 @@
 import { postToTelegramApi } from './core';
 
 // ---------------------------------------- MOTHER BOT ----------------------------------------
+
 export async function motherBotCommands(botToken, ownerUid, message, childBotUrl, childBotSecretToken) {
   const sendRespMessage = async function (chat_id, text) {
     return await postToTelegramApi(botToken, 'sendMessage', {
@@ -206,11 +207,12 @@ export async function reset(botToken, ownerUid, message, inOwnerChat) {
             chat_id: ownerUid,
             text: `Reset failed!`,
           });
+        } else {
+          await postToTelegramApi(botToken, 'sendMessage', {
+            chat_id: ownerUid,
+            text: `Reset success!`,
+          });
         }
-        await postToTelegramApi(botToken, 'sendMessage', {
-          chat_id: ownerUid,
-          text: `Reset success!`,
-        });
       } else {
         await postToTelegramApi(botToken, 'sendMessage', {
           chat_id: ownerUid,
@@ -242,8 +244,10 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
   const fromChat = message.chat;
   const fromChatId = fromChat.id;
   let topicId = fromChatToTopic.get(fromChatId);
+  let isNewTopic = false;
+  let fromChatName
   if (!topicId) {
-    const fromChatName = fromChat.username ?
+    fromChatName = fromChat.username ?
         `@${fromChat.username}` : [fromChat.first_name, fromChat.last_name].filter(Boolean).join(' ');
     const createTopicResp = await (await postToTelegramApi(botToken, 'createForumTopic', {
       chat_id: superGroupChatId,
@@ -251,11 +255,7 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
     })).json();
     topicId = createTopicResp.result?.message_thread_id
     await addTopicToFromChatOnMetaData(botToken, metaDataMessage, ownerUid, topicId, fromChatId);
-    // send PM to bot owner for the bad notification on super group for first message
-    await postToTelegramApi(botToken, 'sendMessage', {
-      chat_id: ownerUid,
-      text: `New PM chat from ${fromChatName}, Look at your PM_SUPERGROUP`,
-    });
+    isNewTopic = true;
   }
 
   // forwardMessage to topic
@@ -266,6 +266,19 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
     message_id: message.message_id
   })).json();
   if (forwardMessageResp.ok) {
+    if (isNewTopic) {
+      // send PM to bot owner for the bad notification on super group for first message
+      let messageLink;
+      if(superGroupChatId.toString().startsWith("-100")) {
+        messageLink = `https://t.me/c/${superGroupChatId.toString().substring(4)}/${topicId}/${forwardMessageResp.result.message_id}`
+      }
+      await postToTelegramApi(botToken, 'sendMessage', {
+        chat_id: ownerUid,
+        text: `${messageLink
+            ? `New PM chat from ${fromChatName}.\nClick the link below to view it in your PM_SUPERGROUP:\n${messageLink}`
+            : `New PM chat from ${fromChatName}, Go view it in your PM_SUPERGROUP`}`,
+      });
+    }
     // notify sending status by MessageReaction
     await postToTelegramApi(botToken, 'setMessageReaction', {
       chat_id: fromChatId,

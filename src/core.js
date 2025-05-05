@@ -93,6 +93,12 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
     if (!update.message) {
         return new Response('OK');
     }
+    // // for debugging
+    // await postToTelegramApi(botToken, 'sendMessage', {
+    //     chat_id: ownerUid,
+    //     text: `DEBUG MESSAGE! update: ${JSON.stringify(update)}`,
+    // });
+    // // for debugging
     const message = update.message;
     const fromChat = message.chat;
 
