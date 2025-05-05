@@ -249,9 +249,20 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
   if (!topicId) {
     fromChatName = fromChat.username ?
         `@${fromChat.username}` : [fromChat.first_name, fromChat.last_name].filter(Boolean).join(' ');
+    let topicName = `${fromChatName} ${fromChatId === message.from.id ? `(${fromChatId})` : `(${fromChatId})(${message.from.id})`}`
+    const lengthCheckDo = function (topicName, newTopicName) {
+      if (topicName.length > 128) {
+        return newTopicName;
+      } else {
+        return topicName
+      }
+    }
+    topicName = lengthCheckDo(topicName, `${fromChatName} (${fromChatId})`);
+    topicName = lengthCheckDo(topicName, fromChatName);
+    topicName = lengthCheckDo(topicName, fromChatName.substring(0, 127));
     const createTopicResp = await (await postToTelegramApi(botToken, 'createForumTopic', {
       chat_id: superGroupChatId,
-      name: fromChatName,
+      name: topicName,
     })).json();
     topicId = createTopicResp.result?.message_thread_id
     await addTopicToFromChatOnMetaData(botToken, metaDataMessage, ownerUid, topicId, fromChatId);
@@ -259,6 +270,7 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
   }
 
   // forwardMessage to topic
+  // TODO: 2025/5/6 用copyMessage方法，用markdown做forward的entity，给消息点emoji后，点击按钮发送emoji到对应的私信里
   const forwardMessageResp = await (await postToTelegramApi(botToken, 'forwardMessage', {
     chat_id: superGroupChatId,
     message_thread_id: topicId,

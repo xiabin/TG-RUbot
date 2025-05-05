@@ -90,15 +90,15 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
     }
 
     const update = await request.json();
+    // --- for debugging ---
+    await postToTelegramApi(botToken, 'sendMessage', {
+        chat_id: ownerUid,
+        text: `DEBUG MESSAGE! update: ${JSON.stringify(update)}`,
+    });
+    // --- for debugging ---
     if (!update.message) {
         return new Response('OK');
     }
-    // // for debugging
-    // await postToTelegramApi(botToken, 'sendMessage', {
-    //     chat_id: ownerUid,
-    //     text: `DEBUG MESSAGE! update: ${JSON.stringify(update)}`,
-    // });
-    // // for debugging
     const message = update.message;
     const fromChat = message.chat;
 
@@ -202,12 +202,12 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
 
         return new Response('OK');
     } catch (error) {
-        // --- for debug ---
+        // --- for debugging ---
         await postToTelegramApi(botToken, 'sendMessage', {
             chat_id: ownerUid,
             text: `Error! You can send the message to developer for getting help : ${error.message} origin: ${JSON.stringify(update)}`,
         });
-        // --- for debug ---
+        // --- for debugging ---
         return new Response('OK');
     }
 }
