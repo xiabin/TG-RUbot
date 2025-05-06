@@ -98,6 +98,12 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
         text: `DEBUG MESSAGE! update: ${JSON.stringify(update)}`,
     });
     // --- for debugging ---
+
+    if (update.message_reaction) {
+        // TODO: 2025/5/6 message_reaction
+        return new Response('OK');
+    }
+
     if (!update.message) {
         return new Response('OK');
     }
@@ -131,6 +137,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
     const reply = message.reply_to_message;
     try {
         if ("/start" === message.text) {
+            // TODO: 2025/5/6 Introduction words for various scenarios
             return new Response('OK');
         }
 

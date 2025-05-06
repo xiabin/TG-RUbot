@@ -161,7 +161,7 @@ export async function doCheckInit(botToken, ownerUid, failedMessage, failed) {
 }
 
 export function parseMetaDataMessage(metaDataMessage) {
-  const metaDataSplit = metaDataMessage.text.split(";")
+  const metaDataSplit = metaDataMessage.text.split(";");
   let superGroupChatId = parseInt(metaDataSplit[0]);
   let topicToFromChat = new Map;
   let fromChatToTopic = new Map;
@@ -243,6 +243,7 @@ export async function reset(botToken, ownerUid, message, inOwnerChat) {
 export async function processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, metaDataMessage) {
   const fromChat = message.chat;
   const fromChatId = fromChat.id;
+  const pmMessageId = message.message_id;
   let topicId = fromChatToTopic.get(fromChatId);
   let isNewTopic = false;
   let fromChatName
@@ -273,15 +274,16 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
   const forwardMessageResp = await (await postToTelegramApi(botToken, 'forwardMessage', {
     chat_id: superGroupChatId,
     message_thread_id: topicId,
-    from_chat_id: fromChat.id,
-    message_id: message.message_id,
+    from_chat_id: fromChatId,
+    message_id: pmMessageId,
   })).json();
   if (forwardMessageResp.ok) {
+    const topicMessageId = forwardMessageResp.result.message_id;
     if (isNewTopic) {
       // send PM to bot owner for the bad notification on super group for first message
       let messageLink;
       if(superGroupChatId.toString().startsWith("-100")) {
-        messageLink = `https://t.me/c/${superGroupChatId.toString().substring(4)}/${topicId}/${forwardMessageResp.result.message_id}`
+        messageLink = `https://t.me/c/${superGroupChatId.toString().substring(4)}/${topicId}/${topicMessageId}`
       }
       await postToTelegramApi(botToken, 'sendMessage', {
         chat_id: ownerUid,
@@ -290,28 +292,111 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
             : `New PM chat from ${fromChatName}, Go view it in your PM_SUPERGROUP`}`,
       });
     }
+    // save messageId connection to superGroupChat pin message
+    await saveMessageConnection(botToken, superGroupChatId, topicId, topicMessageId, pmMessageId, ownerUid);
     // notify sending status by MessageReaction
     await postToTelegramApi(botToken, 'setMessageReaction', {
       chat_id: fromChatId,
-      message_id: message.message_id,
+      message_id: pmMessageId,
       reaction: [{ type: "emoji", emoji: "🕊" }]
     });
   }
 }
 
 export async function processPMSent(botToken, message, topicToFromChat) {
+  const ownerUid = message.from.id;
+  const topicId = message.message_thread_id;
+  const superGroupChatId = message.chat.id;
+  const topicMessageId = message.message_id;
   const pmChatId = topicToFromChat.get(message.message_thread_id)
   const copyMessageResp = await (await postToTelegramApi(botToken, 'copyMessage', {
     chat_id: pmChatId,
-    from_chat_id: message.chat.id,
-    message_id: message.message_id
+    from_chat_id: superGroupChatId,
+    message_id: topicMessageId
   })).json();
   if (copyMessageResp.ok) {
+    const pmMessageId = copyMessageResp.result.message_id
+    // save messageId connection to group pin message
+    await saveMessageConnection(botToken, superGroupChatId, topicId, topicMessageId, pmMessageId, ownerUid);
     // notify sending status by MessageReaction
     await postToTelegramApi(botToken, 'setMessageReaction', {
-      chat_id: message.chat.id,
-      message_id: message.message_id,
+      chat_id: superGroupChatId,
+      message_id: topicMessageId,
       reaction: [{ type: "emoji", emoji: "🕊" }]
     });
   }
 }
+
+// ---------------------------------------- MESSAGE CONNECTION ----------------------------------------
+
+async function saveMessageConnection(botToken, superGroupChatId, topicId, topicMessageId, pmMessageId, ownerUid) {
+  let failed = false;
+  let failedMessage = "Chat message connect failed, can't do emoji react, edit, delete.";
+  let metaDataMessageId;
+  let metaDataMessageText;
+  const checkMetaDataMessageResp = await (await postToTelegramApi(botToken, 'getChat', {
+    chat_id: superGroupChatId,
+  })).json();
+  if (!checkMetaDataMessageResp.ok || !checkMetaDataMessageResp.result.pinned_message?.text) {
+    failedMessage += " checkMetaDataMessageResp: " + JSON.stringify(checkMetaDataMessageResp);
+    failed = true;
+  } else {
+    metaDataMessageId = checkMetaDataMessageResp.result.pinned_message.message_id
+    metaDataMessageText = checkMetaDataMessageResp.result.pinned_message.text
+  }
+  if (failed) {
+    // new message connection in superGroupChat pinned message
+    failed = false;
+    metaDataMessageText = `${topicId}-${topicMessageId}:${pmMessageId}`;
+    const sendMetaDataMessageResp = await (await postToTelegramApi(botToken, 'sendMessage', {
+      chat_id: superGroupChatId,
+      text: metaDataMessageText,
+    })).json();
+    if (!sendMetaDataMessageResp.ok) {
+      failedMessage += " sendMetaDataMessageResp: " + JSON.stringify(sendMetaDataMessageResp);
+      failed = true;
+    }
+    if (!failed) {
+      const pinMetaDataMessageResp = await (await postToTelegramApi(botToken, 'pinChatMessage', {
+        chat_id: superGroupChatId,
+        message_id: sendMetaDataMessageResp.result.message_id,
+      })).json();
+      if (!pinMetaDataMessageResp.ok) {
+        failedMessage += " pinMetaDataMessageResp: " + JSON.stringify(pinMetaDataMessageResp);
+        failed = true;
+      }
+    }
+  } else {
+    // add message connection in superGroupChat pinned message
+    metaDataMessageText = `${metaDataMessageText};${topicId}-${topicMessageId}:${pmMessageId}`;
+    // text message max length 4096
+    const processForTextMessageMaxLength = function (text, process) {
+      if (text.length > 4096) {
+        text = process(text);
+        text = processForTextMessageMaxLength(text, process);
+      }
+      return text;
+    }
+    metaDataMessageText = processForTextMessageMaxLength(
+        metaDataMessageText, (metaDataMessageText) => metaDataMessageText.split(';').slice(1).join(';'));
+    const editMessageTextResp = await (await postToTelegramApi(botToken, 'editMessageText', {
+      chat_id: superGroupChatId,
+      message_id: metaDataMessageId,
+      text: metaDataMessageText,
+    })).json();
+    if (!editMessageTextResp.ok) {
+      failedMessage += " editMessageTextResp: " + JSON.stringify(editMessageTextResp);
+      failed = true;
+    }
+  }
+  if (failed) {
+    await postToTelegramApi(botToken, 'sendMessage', {
+      chat_id: ownerUid,
+      text: `GROUP ${superGroupChatId} MESSAGE ${topicId}-${topicMessageId}:${pmMessageId}: ${failedMessage}`,
+    });
+  }
+}
+
+// ---------------------------------------- EMOJI REACTION ----------------------------------------
+
+
