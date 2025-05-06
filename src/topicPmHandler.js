@@ -329,11 +329,12 @@ export async function processPMSent(botToken, message, topicToFromChat) {
 
 // ---------------------------------------- MESSAGE CONNECTION ----------------------------------------
 
-async function saveMessageConnection(botToken, superGroupChatId, topicId, topicMessageId, pmMessageId, ownerUid) {
-  let failed = false;
-  let failedMessage = "Chat message connect failed, can't do emoji react, edit, delete.";
+async function checkMessageConnectionMetaData(botToken, superGroupChatId, failedMessage, failed) {
   let metaDataMessageId;
   let metaDataMessageText;
+  let metaDataMessage;
+  failedMessage = failedMessage || '';
+  failed = failed || false;
   const checkMetaDataMessageResp = await (await postToTelegramApi(botToken, 'getChat', {
     chat_id: superGroupChatId,
   })).json();
@@ -341,9 +342,34 @@ async function saveMessageConnection(botToken, superGroupChatId, topicId, topicM
     failedMessage += " checkMetaDataMessageResp: " + JSON.stringify(checkMetaDataMessageResp);
     failed = true;
   } else {
-    metaDataMessageId = checkMetaDataMessageResp.result.pinned_message.message_id
-    metaDataMessageText = checkMetaDataMessageResp.result.pinned_message.text
+    metaDataMessage = checkMetaDataMessageResp.result.pinned_message;
+    metaDataMessageId = checkMetaDataMessageResp.result.pinned_message.message_id;
+    metaDataMessageText = checkMetaDataMessageResp.result.pinned_message.text;
   }
+  return { failedMessage, failed, metaDataMessageId, metaDataMessageText, metaDataMessage };
+}
+
+async function checkMessageConnectionMetaDataForAction(botToken, superGroupChatId, failedMessage, ownerUid) {
+  const checkMessageConnectionMetaDataResp = await checkMessageConnectionMetaData(
+      botToken, superGroupChatId, failedMessage);
+  if (checkMessageConnectionMetaDataResp.failed) {
+    await postToTelegramApi(botToken, 'sendMessage', {
+      chat_id: ownerUid,
+      text: failedMessage,
+    });
+  }
+  return checkMessageConnectionMetaDataResp;
+}
+
+async function saveMessageConnection(botToken, superGroupChatId, topicId, topicMessageId, pmMessageId, ownerUid) {
+  let failed = false;
+  let failedMessage = "Chat message connect failed, can't do emoji react, edit, delete.";
+  const checkMessageConnectionMetaDataResp = await checkMessageConnectionMetaData(
+      botToken, superGroupChatId, failedMessage, failed);
+  failedMessage = checkMessageConnectionMetaDataResp.failedMessage;
+  failed = checkMessageConnectionMetaDataResp.failed;
+  let metaDataMessageId = checkMessageConnectionMetaDataResp.metaDataMessageId;
+  let metaDataMessageText = checkMessageConnectionMetaDataResp.metaDataMessageText;
   if (failed) {
     // new message connection in superGroupChat pinned message
     failed = false;
@@ -357,9 +383,10 @@ async function saveMessageConnection(botToken, superGroupChatId, topicId, topicM
       failed = true;
     }
     if (!failed) {
+      metaDataMessageId = sendMetaDataMessageResp.result.message_id;
       const pinMetaDataMessageResp = await (await postToTelegramApi(botToken, 'pinChatMessage', {
         chat_id: superGroupChatId,
-        message_id: sendMetaDataMessageResp.result.message_id,
+        message_id: metaDataMessageId,
       })).json();
       if (!pinMetaDataMessageResp.ok) {
         failedMessage += " pinMetaDataMessageResp: " + JSON.stringify(pinMetaDataMessageResp);
@@ -399,4 +426,105 @@ async function saveMessageConnection(botToken, superGroupChatId, topicId, topicM
 
 // ---------------------------------------- EMOJI REACTION ----------------------------------------
 
+export async function processERReceived(botToken, ownerUid, messageReaction, superGroupChatId) {
+  const pmMessageId = messageReaction.message_id;
+  let topicMessageId;
+  let reaction = messageReaction.new_reaction;
 
+  const checkMessageConnectionMetaDataResp =
+      await checkMessageConnectionMetaDataForAction(botToken, superGroupChatId, "Can't sent EMOJI REACTION.", ownerUid);
+  if (checkMessageConnectionMetaDataResp.failed) return;
+
+  const messageConnectionTextSplit = checkMessageConnectionMetaDataResp.metaDataMessageText.split(';').reverse();
+  for (let i = 0; i < messageConnectionTextSplit.length; i++) {
+    const messageConnectionTextSplitSplit = messageConnectionTextSplit[i].split(':');
+    if (pmMessageId === parseInt(messageConnectionTextSplitSplit[1])) {
+      const topicMessageMetaData = messageConnectionTextSplitSplit[0];
+      const topicMessageMetaDataSplit = topicMessageMetaData.split('-');
+      topicMessageId = parseInt(topicMessageMetaDataSplit[1]);
+      break;
+    }
+  }
+
+  if (!topicMessageId) {
+    return;
+  }
+
+  if (reaction.length === 0) {
+    reaction = [
+      {
+        "type": "emoji",
+        "emoji": "🕊"
+      }
+    ]
+  }
+
+  await sendEmojiReaction(botToken, superGroupChatId, topicMessageId, reaction, ownerUid);
+}
+
+export async function processERSent(botToken, messageReaction, topicToFromChat) {
+  const ownerUid = messageReaction.user.id;
+  const superGroupChatId = messageReaction.chat.id;
+  let topicId;
+  const topicMessageId = messageReaction.message_id;
+  let pmChatId;
+  let pmMessageId;
+  let reaction = messageReaction.new_reaction;
+
+  const checkMessageConnectionMetaDataResp =
+      await checkMessageConnectionMetaDataForAction(botToken, superGroupChatId, "Can't sent EMOJI REACTION.", ownerUid);
+  if (checkMessageConnectionMetaDataResp.failed) return;
+
+  const messageConnectionTextSplit = checkMessageConnectionMetaDataResp.metaDataMessageText.split(';').reverse();
+  for (let i = 0; i < messageConnectionTextSplit.length; i++) {
+    const messageConnectionTextSplitSplit = messageConnectionTextSplit[i].split(':');
+    const topicMessageMetaData = messageConnectionTextSplitSplit[0];
+    const topicMessageMetaDataSplit = topicMessageMetaData.split('-');
+    if (topicMessageId === parseInt(topicMessageMetaDataSplit[1])) {
+      topicId = topicMessageMetaDataSplit[0];
+      pmMessageId = messageConnectionTextSplitSplit[1];
+      pmChatId = topicToFromChat.get(parseInt(topicId));
+      break;
+    }
+  }
+
+  if (!pmMessageId) {
+    return;
+  }
+
+  if (reaction.length === 0) {
+    reaction = [
+      {
+        "type": "emoji",
+        "emoji": "🕊"
+      }
+    ]
+  }
+
+  await sendEmojiReaction(botToken, pmChatId, pmMessageId, reaction, ownerUid);
+}
+
+async function sendEmojiReaction(botToken, targetChatId, targetMessageId, reaction, ownerUid) {
+  const setMessageReactionResp = await (await postToTelegramApi(botToken, 'setMessageReaction', {
+    chat_id: targetChatId,
+    message_id: targetMessageId,
+    reaction: reaction
+  })).json();
+  if (!setMessageReactionResp.ok) {
+    if (setMessageReactionResp.description.includes('REACTIONS_TOO_MANY')) {
+      await (await postToTelegramApi(botToken, 'setMessageReaction', {
+        chat_id: targetChatId,
+        message_id: targetMessageId,
+        reaction: reaction.slice(-1)
+      })).json();
+    } else if (setMessageReactionResp.description.includes('REACTION_INVALID')) {
+    } else {
+      // TODO: 2025/5/6 --- for debugging ---
+      await postToTelegramApi(botToken, 'sendMessage', {
+        chat_id: ownerUid,
+        text: `setMessageReactionResp : ${JSON.stringify(setMessageReactionResp)}`,
+      });
+      // TODO: 2025/5/6 --- for debugging ---
+    }
+  }
+}

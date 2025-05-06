@@ -8,6 +8,8 @@ import {
     init,
     motherBotCommands,
     parseMetaDataMessage,
+    processERReceived,
+    processERSent,
     processPMReceived,
     processPMSent,
     reset
@@ -100,8 +102,42 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
     // --- for debugging ---
 
     if (update.message_reaction) {
-        // TODO: 2025/5/6 message_reaction
-        return new Response('OK');
+        try {
+            // message_reaction EMOJI REACT(ER)
+            const messageReaction = update.message_reaction
+            const fromChat = messageReaction.chat;
+
+            const check = await doCheckInit(botToken, ownerUid)
+            if (!check.failed) {
+                const metaDataMessage = check.checkMetaDataMessageResp.result.pinned_message;
+                const {
+                    superGroupChatId,
+                    topicToFromChat,
+                    fromChatToTopic
+                } = parseMetaDataMessage(metaDataMessage);
+                if (false) {
+                    // ignore message types
+                    return new Response('OK');
+                } else if (messageReaction.user.id.toString() === ownerUid && fromChat.id === superGroupChatId
+                    && fromChat.is_forum) {
+                    // topic ER send to others.
+                    await processERSent(botToken, messageReaction, topicToFromChat);
+                } else {
+                    // topic ER receive from others.
+                    await processERReceived(botToken, ownerUid, messageReaction, superGroupChatId);
+                }
+                return new Response('OK');
+            }
+            return new Response('OK');
+        } catch (error) {
+            // --- for debugging ---
+            await postToTelegramApi(botToken, 'sendMessage', {
+                chat_id: ownerUid,
+                text: `Error! You can send the message to developer for getting help : ${error.message} origin: ${JSON.stringify(update)}`,
+            });
+            // --- for debugging ---
+            return new Response('OK');
+        }
     }
 
     if (!update.message) {
@@ -154,7 +190,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
                 return new Response('OK');
             } else if (message.from.id.toString() === ownerUid && fromChat.id === superGroupChatId
                 && fromChat.is_forum && message.is_topic_message) {
-                // topic PM SEND to others
+                // topic PM send to others
                 await processPMSent(botToken, message, topicToFromChat);
             } else {
                 // topic PM receive from others. Always receive first.
