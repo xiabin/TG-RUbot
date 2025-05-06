@@ -1,4 +1,4 @@
-import { postToTelegramApi } from './core';
+import { allowed_updates, postToTelegramApi } from './core';
 
 // ---------------------------------------- MOTHER BOT ----------------------------------------
 
@@ -16,7 +16,7 @@ export async function motherBotCommands(botToken, ownerUid, message, childBotUrl
       const childBotToken = message.text.split("/install ")[1];
       const setWebhookResp = await (await postToTelegramApi(childBotToken, 'setWebhook', {
         url: `${childBotUrl.endsWith('/') ? childBotUrl.slice(0, -1) : childBotUrl}/webhook/${childBotOwnerId}/${childBotToken}`,
-        allowed_updates: ['message'],
+        allowed_updates: allowed_updates,
         secret_token: childBotSecretToken
       })).json();
       if (setWebhookResp.ok) {
@@ -270,12 +270,11 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
   }
 
   // forwardMessage to topic
-  // TODO: 2025/5/6 用copyMessage方法，用markdown做forward的entity，给消息点emoji后，点击按钮发送emoji到对应的私信里
   const forwardMessageResp = await (await postToTelegramApi(botToken, 'forwardMessage', {
     chat_id: superGroupChatId,
     message_thread_id: topicId,
     from_chat_id: fromChat.id,
-    message_id: message.message_id
+    message_id: message.message_id,
   })).json();
   if (forwardMessageResp.ok) {
     if (isNewTopic) {

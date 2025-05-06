@@ -13,6 +13,8 @@ import {
     reset
 } from './topicPmHandler.js'
 
+export const allowed_updates = ['message', 'message_reaction'];
+
 export function validateSecretToken(token) {
     return token.length > 15 && /[A-Z]/.test(token) && /[a-z]/.test(token) && /[0-9]/.test(token);
 }
@@ -47,7 +49,7 @@ export async function handleInstall(request, ownerUid, botToken, prefix, secretT
     try {
         const response = await postToTelegramApi(botToken, 'setWebhook', {
             url: webhookUrl,
-            allowed_updates: ['message'],
+            allowed_updates: allowed_updates,
             secret_token: secretToken
         });
 
