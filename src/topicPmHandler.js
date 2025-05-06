@@ -177,7 +177,7 @@ export function parseMetaDataMessage(metaDataMessage) {
   return { superGroupChatId, topicToFromChat, fromChatToTopic };
 }
 
-export async function addTopicToFromChatOnMetaData(botToken, metaDataMessage, ownerUid, topicId, fromChatId) {
+async function addTopicToFromChatOnMetaData(botToken, metaDataMessage, ownerUid, topicId, fromChatId) {
   const newText = `${metaDataMessage.text};${topicId}:${fromChatId}`
   await postToTelegramApi(botToken, 'editMessageText', {
     chat_id: ownerUid,
@@ -187,6 +187,20 @@ export async function addTopicToFromChatOnMetaData(botToken, metaDataMessage, ow
   return { newText };
 }
 
+async function cleanItemOnMetaData(botToken, metaDataMessage, ownerUid, topicId) {
+  const oldText = metaDataMessage.text;
+  let itemStartIndex = oldText.indexOf(`;${topicId}:`) + 1;
+  let itemEndIndex = oldText.indexOf(';', itemStartIndex);
+  let newText = itemEndIndex === -1 ? oldText.substring(0, itemStartIndex - 1)
+      : oldText.replace(oldText.substring(itemStartIndex, itemEndIndex + 1), '');
+  await postToTelegramApi(botToken, 'editMessageText', {
+    chat_id: ownerUid,
+    message_id: metaDataMessage.message_id,
+    text: newText,
+  });
+  metaDataMessage.text = newText;
+  return { newText };
+}
 
 export async function reset(botToken, ownerUid, message, inOwnerChat) {
   try {
@@ -300,6 +314,12 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
       message_id: pmMessageId,
       reaction: [{ type: "emoji", emoji: "🕊" }]
     });
+  } else if (forwardMessageResp.description.includes('message thread not found')) {
+    // clean metadata message
+    await cleanItemOnMetaData(botToken, metaDataMessage, ownerUid, topicId);
+    fromChatToTopic.delete(topicId)
+    // resend the message
+    await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, metaDataMessage)
   }
 }
 
@@ -512,11 +532,11 @@ async function sendEmojiReaction(botToken, targetChatId, targetMessageId, reacti
   })).json();
   if (!setMessageReactionResp.ok) {
     if (setMessageReactionResp.description.includes('REACTIONS_TOO_MANY')) {
-      await (await postToTelegramApi(botToken, 'setMessageReaction', {
+      await postToTelegramApi(botToken, 'setMessageReaction', {
         chat_id: targetChatId,
         message_id: targetMessageId,
         reaction: reaction.slice(-1)
-      })).json();
+      });
     } else if (setMessageReactionResp.description.includes('REACTION_INVALID')) {
     } else {
       // TODO: 2025/5/6 --- for debugging ---
