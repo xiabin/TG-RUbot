@@ -282,7 +282,7 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
     if (isNewTopic) {
       // send PM to bot owner for the bad notification on super group for first message
       let messageLink;
-      if(superGroupChatId.toString().startsWith("-100")) {
+      if (superGroupChatId.toString().startsWith("-100")) {
         messageLink = `https://t.me/c/${superGroupChatId.toString().substring(4)}/${topicId}/${topicMessageId}`
       }
       await postToTelegramApi(botToken, 'sendMessage', {
