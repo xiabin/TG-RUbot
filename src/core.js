@@ -3,6 +3,7 @@
  * Shared code between Cloudflare Worker and Vercel deployments
  */
 import {
+  banTopic,
   checkInit,
   doCheckInit,
   init,
@@ -12,7 +13,8 @@ import {
   processERSent,
   processPMReceived,
   processPMSent,
-  reset
+  reset,
+  unbanTopic
 } from './topicPmHandler.js'
 
 export const allowed_updates = ['message', 'message_reaction', 'edited_message'];
@@ -117,7 +119,8 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
         const {
           superGroupChatId,
           topicToFromChat,
-          fromChatToTopic
+          fromChatToTopic,
+          bannedTopics
         } = parseMetaDataMessage(metaDataMessage);
         if (false) {
           // ignore message types
@@ -128,7 +131,9 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
           await processERSent(botToken, messageReaction, topicToFromChat);
         } else {
           // topic ER receive from others.
-          await processERReceived(botToken, ownerUid, messageReaction, superGroupChatId);
+          if (!bannedTopics.includes(fromChatToTopic.get(fromChat.id))) {
+            await processERReceived(botToken, ownerUid, messageReaction, superGroupChatId, bannedTopics);
+          }
         }
         return new Response('OK');
       }
@@ -156,17 +161,49 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
   }
 
   // --- commands ---
-  if (message.from.id.toString() === ownerUid && fromChat.is_forum && !message.is_topic_message) {
-    // --- commands in General topic ---
-    if (message.text === ".!pm_RUbot_checkInit!.") {
-      return await checkInit(botToken, ownerUid, message);
-    } else if (message.text === ".!pm_RUbot_doInit!.") {
-      return await init(botToken, ownerUid, message);
-    } else if (message.text === ".!pm_RUbot_doReset!.") {
-      return await reset(botToken, ownerUid, message, false);
+  if (message.from.id.toString() === ownerUid && fromChat.is_forum
+      && message.text.startsWith(".!") && message.text.endsWith("!.")) {
+    if (!message.is_topic_message) {
+      // --- commands in General topic ---
+      if (message.text === ".!pm_RUbot_checkInit!.") {
+        return await checkInit(botToken, ownerUid, message);
+      } else if (message.text === ".!pm_RUbot_doInit!.") {
+        return await init(botToken, ownerUid, message);
+      } else if (message.text === ".!pm_RUbot_doReset!.") {
+        return await reset(botToken, ownerUid, message, false);
+      }
+    } else {
+      // --- commands in PM topic ---
+      const check = await doCheckInit(botToken, ownerUid)
+      if (!check.failed) {
+        const metaDataMessage = check.checkMetaDataMessageResp.result.pinned_message;
+        const {
+          superGroupChatId,
+          topicToFromChat,
+          fromChatToTopic,
+          bannedTopics
+        } = parseMetaDataMessage(metaDataMessage);
+        if (fromChat.id !== superGroupChatId) {
+          await postToTelegramApi(botToken, 'sendMessage', {
+            chat_id: fromChat.id,
+            text: `Only can work in your PM super group`,
+          });
+          return new Response('OK');
+        }
+        if (message.text === (".!pm_RUbot_ban!.")) {
+          return await banTopic(botToken, ownerUid, message, topicToFromChat, metaDataMessage, false);
+        } else if (message.text === (".!pm_RUbot_unban!.")) {
+          return await unbanTopic(botToken, ownerUid, message, topicToFromChat, metaDataMessage, false);
+        } else if (message.text === (".!pm_RUbot_silent_ban!.")) {
+          return await banTopic(botToken, ownerUid, message, topicToFromChat, metaDataMessage, true);
+        } else if (message.text === (".!pm_RUbot_silent_unban!.")) {
+          return await unbanTopic(botToken, ownerUid, message, topicToFromChat, metaDataMessage, true);
+        }
+      }
     }
     return new Response('OK');
-  } else if (message.from.id.toString() === ownerUid && fromChat.id.toString() === ownerUid) {
+  } else if (message.from.id.toString() === ownerUid && fromChat.id.toString() === ownerUid
+      && message.text.startsWith(".!") && message.text.endsWith("!.")) {
     // --- commands in Owner Chat ---
     if (message.text === ".!pm_RUbot_doReset!.") {
       return await reset(botToken, ownerUid, message, true);
@@ -187,7 +224,8 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
       const {
         superGroupChatId,
         topicToFromChat,
-        fromChatToTopic
+        fromChatToTopic,
+        bannedTopics
       } = parseMetaDataMessage(metaDataMessage);
       if (message.forum_topic_created || message.pinned_message) {
         // ignore message types
@@ -198,7 +236,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
         await processPMSent(botToken, message, topicToFromChat);
       } else {
         // topic PM receive from others. Always receive first.
-        await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, metaDataMessage);
+        await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage);
       }
       return new Response('OK');
     }

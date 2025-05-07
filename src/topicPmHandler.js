@@ -162,19 +162,26 @@ export async function doCheckInit(botToken, ownerUid, failedMessage, failed) {
 
 export function parseMetaDataMessage(metaDataMessage) {
   const metaDataSplit = metaDataMessage.text.split(";");
-  let superGroupChatId = parseInt(metaDataSplit[0]);
-  let topicToFromChat = new Map;
-  let fromChatToTopic = new Map;
+  const superGroupChatId = parseInt(metaDataSplit[0]);
+  const topicToFromChat = new Map;
+  const fromChatToTopic = new Map;
+  const bannedTopics = [];
   if (metaDataSplit.length > 1) {
     for (let i = 1; i < metaDataSplit.length; i++) {
       const topicToFromChatSplit = metaDataSplit[i].split(":");
       const topic = parseInt(topicToFromChatSplit[0]);
-      const fromChat = parseInt(topicToFromChatSplit[1]);
+      let fromChat;
+      if (topicToFromChatSplit[1].startsWith('b')) {
+        bannedTopics.push(topic);
+        fromChat = parseInt(topicToFromChatSplit[1].substring(1));
+      } else {
+        fromChat = parseInt(topicToFromChatSplit[1]);
+      }
       topicToFromChat.set(topic, fromChat);
       fromChatToTopic.set(fromChat, topic);
     }
   }
-  return { superGroupChatId, topicToFromChat, fromChatToTopic };
+  return { superGroupChatId, topicToFromChat, fromChatToTopic, bannedTopics };
 }
 
 async function addTopicToFromChatOnMetaData(botToken, metaDataMessage, ownerUid, topicId, fromChatId) {
@@ -184,7 +191,7 @@ async function addTopicToFromChatOnMetaData(botToken, metaDataMessage, ownerUid,
     message_id: metaDataMessage.message_id,
     text: newText,
   });
-  return { newText };
+  return { messageText: newText };
 }
 
 async function cleanItemOnMetaData(botToken, metaDataMessage, ownerUid, topicId) {
@@ -199,7 +206,35 @@ async function cleanItemOnMetaData(botToken, metaDataMessage, ownerUid, topicId)
     text: newText,
   });
   metaDataMessage.text = newText;
-  return { newText };
+  return { messageText: newText };
+}
+
+async function banTopicOnMetaData(botToken, ownerUid, metaDataMessage, topicId) {
+  const oldText = metaDataMessage.text;
+  if (oldText.includes(`;${topicId}:b`)) {
+    return { isBannedBefore: true, messageText: oldText };
+  }
+  const newText = oldText.replace(`;${topicId}:`, `;${topicId}:b`);
+  await postToTelegramApi(botToken, 'editMessageText', {
+    chat_id: ownerUid,
+    message_id: metaDataMessage.message_id,
+    text: newText,
+  });
+  return { isBannedBefore: false, messageText: newText };
+}
+
+async function unbanTopicOnMetaData(botToken, ownerUid, metaDataMessage, topicId) {
+  const oldText = metaDataMessage.text;
+  if (!oldText.includes(`;${topicId}:b`)) {
+    return { isNotBannedBefore: true, messageText: oldText };
+  }
+  const newText = oldText.replace(`;${topicId}:b`, `;${topicId}:`);
+  await postToTelegramApi(botToken, 'editMessageText', {
+    chat_id: ownerUid,
+    message_id: metaDataMessage.message_id,
+    text: newText,
+  });
+  return { isNotBannedBefore: false, messageText: newText };
 }
 
 export async function reset(botToken, ownerUid, message, inOwnerChat) {
@@ -254,7 +289,7 @@ export async function reset(botToken, ownerUid, message, inOwnerChat) {
 
 // ---------------------------------------- PRIVATE MESSAGE ----------------------------------------
 
-export async function processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, metaDataMessage) {
+export async function processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage) {
   const fromChat = message.chat;
   const fromChatId = fromChat.id;
   const pmMessageId = message.message_id;
@@ -282,6 +317,28 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
     topicId = createTopicResp.result?.message_thread_id
     await addTopicToFromChatOnMetaData(botToken, metaDataMessage, ownerUid, topicId, fromChatId);
     isNewTopic = true;
+  }
+
+  const isTopicExists = await (async function () {
+    const reopenForumTopicResp = await (await postToTelegramApi(botToken, 'reopenForumTopic', {
+      chat_id: superGroupChatId,
+      message_thread_id: topicId,
+    })).json();
+    return reopenForumTopicResp.ok || !reopenForumTopicResp.description.includes("TOPIC_ID_INVALID");
+  })()
+
+  // topic has been banned
+  if (bannedTopics.includes(topicId) && isTopicExists) {
+    return
+  }
+
+  if (!isTopicExists) {
+    // clean metadata message
+    await cleanItemOnMetaData(botToken, metaDataMessage, ownerUid, topicId);
+    fromChatToTopic.delete(topicId)
+    // resend the message
+    await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage)
+    return
   }
 
   // forwardMessage to topic
@@ -319,7 +376,7 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
     await cleanItemOnMetaData(botToken, metaDataMessage, ownerUid, topicId);
     fromChatToTopic.delete(topicId)
     // resend the message
-    await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, metaDataMessage)
+    await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage)
   }
 }
 
@@ -446,8 +503,9 @@ async function saveMessageConnection(botToken, superGroupChatId, topicId, topicM
 
 // ---------------------------------------- EMOJI REACTION ----------------------------------------
 
-export async function processERReceived(botToken, ownerUid, messageReaction, superGroupChatId) {
+export async function processERReceived(botToken, ownerUid, messageReaction, superGroupChatId, bannedTopics) {
   const pmMessageId = messageReaction.message_id;
+  let topicId;
   let topicMessageId;
   let reaction = messageReaction.new_reaction;
 
@@ -461,10 +519,13 @@ export async function processERReceived(botToken, ownerUid, messageReaction, sup
     if (pmMessageId === parseInt(messageConnectionTextSplitSplit[1])) {
       const topicMessageMetaData = messageConnectionTextSplitSplit[0];
       const topicMessageMetaDataSplit = topicMessageMetaData.split('-');
+      topicId = parseInt(topicMessageMetaDataSplit[0]);
       topicMessageId = parseInt(topicMessageMetaDataSplit[1]);
       break;
     }
   }
+
+  if (bannedTopics.includes(topicId)) return;
 
   if (!topicMessageId) {
     return;
@@ -539,12 +600,74 @@ async function sendEmojiReaction(botToken, targetChatId, targetMessageId, reacti
       });
     } else if (setMessageReactionResp.description.includes('REACTION_INVALID')) {
     } else {
-      // TODO: 2025/5/6 --- for debugging ---
-      await postToTelegramApi(botToken, 'sendMessage', {
-        chat_id: ownerUid,
-        text: `setMessageReactionResp : ${JSON.stringify(setMessageReactionResp)}`,
-      });
-      // TODO: 2025/5/6 --- for debugging ---
+      // --- for debugging ---
+      // await postToTelegramApi(botToken, 'sendMessage', {
+      //   chat_id: ownerUid,
+      //   text: `setMessageReactionResp : ${JSON.stringify(setMessageReactionResp)}`,
+      // });
+      // --- for debugging ---
     }
   }
+}
+
+// ---------------------------------------- BAN TOPIC ----------------------------------------
+
+export async function banTopic(botToken, ownerUid, message, topicToFromChat, metaDataMessage, isSilent) {
+  const topicId = message.message_thread_id;
+  const superGroupChatId = message.chat.id;
+
+  const { isBannedBefore } =
+      await banTopicOnMetaData(botToken, ownerUid, metaDataMessage, topicId);
+  if (isBannedBefore) {
+    await postToTelegramApi(botToken, 'sendMessage', {
+      chat_id: superGroupChatId,
+      message_thread_id: topicId,
+      text: `This topic already been BANNED!`,
+    });
+    return new Response('OK');
+  }
+
+  await postToTelegramApi(botToken, 'sendMessage', {
+    chat_id: superGroupChatId,
+    message_thread_id: topicId,
+    text: `Successfully BAN this topic for receiving private message!`,
+  });
+
+  if (isSilent) return new Response('OK');
+  const chatId = topicToFromChat.get(topicId)
+  await postToTelegramApi(botToken, 'sendMessage', {
+    chat_id: chatId,
+    text: `You have been BANNED for sending messages!`,
+  });
+  return new Response('OK');
+}
+
+export async function unbanTopic(botToken, ownerUid, message, topicToFromChat, metaDataMessage, isSilent) {
+  const topicId = message.message_thread_id;
+  const superGroupChatId = message.chat.id;
+
+  const { isNotBannedBefore } =
+      await unbanTopicOnMetaData(botToken, ownerUid, metaDataMessage, topicId);
+  if (isNotBannedBefore) {
+    await postToTelegramApi(botToken, 'sendMessage', {
+      chat_id: superGroupChatId,
+      message_thread_id: topicId,
+      text: `This topic has NOT benn banned!`,
+    });
+    return new Response('OK');
+  }
+
+  await postToTelegramApi(botToken, 'sendMessage', {
+    chat_id: superGroupChatId,
+    message_thread_id: topicId,
+    text: `Successfully UN-BAN this topic for receiving private message!`,
+  });
+
+  if (isSilent) return new Response('OK');
+  const chatId = topicToFromChat.get(topicId)
+  await postToTelegramApi(botToken, 'sendMessage', {
+    chat_id: chatId,
+    text: `You have been UN-BANNED for sending messages!`,
+  });
+  return new Response('OK');
 }
