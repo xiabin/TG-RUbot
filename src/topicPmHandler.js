@@ -401,6 +401,11 @@ export async function processPMSent(botToken, message, topicToFromChat) {
       message_id: topicMessageId,
       reaction: [{ type: "emoji", emoji: "🕊" }]
     });
+  } else {
+    await postToTelegramApi(botToken, 'sendMessage', {
+      chat_id: ownerUid,
+      text: `SEND MESSAGE ERROR! copyMessageResp: ${JSON.stringify(copyMessageResp)} message: ${message}`,
+    });
   }
 }
 

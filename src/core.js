@@ -142,7 +142,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
       // --- for debugging ---
       await postToTelegramApi(botToken, 'sendMessage', {
         chat_id: ownerUid,
-        text: `Error! You can send the message to developer for getting help : ${error.message} origin: ${JSON.stringify(update)}`,
+        text: `Error! You can send the message to developer for getting help : ${error.message} Stack: ${error.stack} origin: ${JSON.stringify(update)}`,
       });
       // --- for debugging ---
       return new Response('OK');
@@ -161,57 +161,66 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
   }
 
   // --- commands ---
-  if (message.from.id.toString() === ownerUid && fromChat.is_forum
-      && message.text.startsWith(".!") && message.text.endsWith("!.")) {
-    if (!message.is_topic_message) {
-      // --- commands in General topic ---
-      if (message.text === ".!pm_RUbot_checkInit!.") {
-        return await checkInit(botToken, ownerUid, message);
-      } else if (message.text === ".!pm_RUbot_doInit!.") {
-        return await init(botToken, ownerUid, message);
-      } else if (message.text === ".!pm_RUbot_doReset!.") {
-        return await reset(botToken, ownerUid, message, false);
+  try {
+    if (message.from.id.toString() === ownerUid && fromChat.is_forum
+        && message.text?.startsWith(".!") && message.text?.endsWith("!.")) {
+      if (!message.is_topic_message) {
+        // --- commands in General topic ---
+        if (message.text === ".!pm_RUbot_checkInit!.") {
+          return await checkInit(botToken, ownerUid, message);
+        } else if (message.text === ".!pm_RUbot_doInit!.") {
+          return await init(botToken, ownerUid, message);
+        } else if (message.text === ".!pm_RUbot_doReset!.") {
+          return await reset(botToken, ownerUid, message, false);
+        }
+      } else {
+        // --- commands in PM topic ---
+        const check = await doCheckInit(botToken, ownerUid)
+        if (!check.failed) {
+          const metaDataMessage = check.checkMetaDataMessageResp.result.pinned_message;
+          const {
+            superGroupChatId,
+            topicToFromChat,
+            fromChatToTopic,
+            bannedTopics
+          } = parseMetaDataMessage(metaDataMessage);
+          if (fromChat.id !== superGroupChatId) {
+            await postToTelegramApi(botToken, 'sendMessage', {
+              chat_id: fromChat.id,
+              text: `Only can work in your PM super group`,
+            });
+            return new Response('OK');
+          }
+          if (message.text === (".!pm_RUbot_ban!.")) {
+            return await banTopic(botToken, ownerUid, message, topicToFromChat, metaDataMessage, false);
+          } else if (message.text === (".!pm_RUbot_unban!.")) {
+            return await unbanTopic(botToken, ownerUid, message, topicToFromChat, metaDataMessage, false);
+          } else if (message.text === (".!pm_RUbot_silent_ban!.")) {
+            return await banTopic(botToken, ownerUid, message, topicToFromChat, metaDataMessage, true);
+          } else if (message.text === (".!pm_RUbot_silent_unban!.")) {
+            return await unbanTopic(botToken, ownerUid, message, topicToFromChat, metaDataMessage, true);
+          }
+        }
       }
-    } else {
-      // --- commands in PM topic ---
-      const check = await doCheckInit(botToken, ownerUid)
-      if (!check.failed) {
-        const metaDataMessage = check.checkMetaDataMessageResp.result.pinned_message;
-        const {
-          superGroupChatId,
-          topicToFromChat,
-          fromChatToTopic,
-          bannedTopics
-        } = parseMetaDataMessage(metaDataMessage);
-        if (fromChat.id !== superGroupChatId) {
-          await postToTelegramApi(botToken, 'sendMessage', {
-            chat_id: fromChat.id,
-            text: `Only can work in your PM super group`,
-          });
-          return new Response('OK');
-        }
-        if (message.text === (".!pm_RUbot_ban!.")) {
-          return await banTopic(botToken, ownerUid, message, topicToFromChat, metaDataMessage, false);
-        } else if (message.text === (".!pm_RUbot_unban!.")) {
-          return await unbanTopic(botToken, ownerUid, message, topicToFromChat, metaDataMessage, false);
-        } else if (message.text === (".!pm_RUbot_silent_ban!.")) {
-          return await banTopic(botToken, ownerUid, message, topicToFromChat, metaDataMessage, true);
-        } else if (message.text === (".!pm_RUbot_silent_unban!.")) {
-          return await unbanTopic(botToken, ownerUid, message, topicToFromChat, metaDataMessage, true);
-        }
+      return new Response('OK');
+    } else if (message.from.id.toString() === ownerUid && fromChat.id.toString() === ownerUid
+        && message.text?.startsWith(".!") && message.text?.endsWith("!.")) {
+      // --- commands in Owner Chat ---
+      if (message.text === ".!pm_RUbot_doReset!.") {
+        return await reset(botToken, ownerUid, message, true);
       }
     }
+  } catch (error) {
+    // --- for debugging ---
+    await postToTelegramApi(botToken, 'sendMessage', {
+      chat_id: ownerUid,
+      text: `Error! You can send the message to developer for getting help : ${error.message} Stack: ${error.stack} origin: ${JSON.stringify(update)}`,
+    });
+    // --- for debugging ---
     return new Response('OK');
-  } else if (message.from.id.toString() === ownerUid && fromChat.id.toString() === ownerUid
-      && message.text.startsWith(".!") && message.text.endsWith("!.")) {
-    // --- commands in Owner Chat ---
-    if (message.text === ".!pm_RUbot_doReset!.") {
-      return await reset(botToken, ownerUid, message, true);
-    }
   }
   // --- commands ---
 
-  const reply = message.reply_to_message;
   try {
     if ("/start" === message.text) {
       // TODO: 2025/5/6 Introduction words for various scenarios
@@ -241,6 +250,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
       return new Response('OK');
     }
 
+    const reply = message.reply_to_message;
     if (reply && fromChat.id.toString() === ownerUid) {
       const rm = reply.reply_markup;
       if (rm && rm.inline_keyboard && rm.inline_keyboard.length > 0) {
@@ -292,7 +302,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
     // --- for debugging ---
     await postToTelegramApi(botToken, 'sendMessage', {
       chat_id: ownerUid,
-      text: `Error! You can send the message to developer for getting help : ${error.message} origin: ${JSON.stringify(update)}`,
+      text: `Error! You can send the message to developer for getting help : ${error.message} Stack: ${error.stack} origin: ${JSON.stringify(update)}`,
     });
     // --- for debugging ---
     return new Response('OK');
