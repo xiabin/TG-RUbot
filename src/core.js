@@ -113,6 +113,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
       // message_reaction EMOJI REACT(ER)
       const messageReaction = update.message_reaction
       const fromChat = messageReaction.chat;
+      const fromUser = messageReaction.user;
 
       const check = await doCheckInit(botToken, ownerUid)
       if (!check.failed) {
@@ -126,7 +127,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
         if (false) {
           // ignore message types
           return new Response('OK');
-        } else if (messageReaction.user.id.toString() === ownerUid && fromChat.id === superGroupChatId
+        } else if (fromUser.id.toString() === ownerUid && fromChat.id === superGroupChatId
             && fromChat.is_forum) {
           // topic ER send to others.
           await processERSent(botToken, messageReaction, topicToFromChat);
@@ -155,6 +156,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
   }
   const message = update.message;
   const fromChat = message.chat;
+  const fromUser = message.from;
 
   if (childBotUrl) {
     // --- delivery children bots ---
@@ -163,7 +165,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
 
   // --- commands ---
   try {
-    if (message.from.id.toString() === ownerUid && fromChat.is_forum
+    if (fromUser.id.toString() === ownerUid && fromChat.is_forum
         && message.text?.startsWith(".!") && message.text?.endsWith("!.")) {
       if (!message.is_topic_message) {
         // --- commands in General topic ---
@@ -204,7 +206,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
         }
       }
       return new Response('OK');
-    } else if (message.from.id.toString() === ownerUid && fromChat.id.toString() === ownerUid
+    } else if (fromUser.id.toString() === ownerUid && fromChat.id.toString() === ownerUid
         && message.text?.startsWith(".!") && message.text?.endsWith("!.")) {
       // --- commands in Owner Chat ---
       if (message.text === ".!pm_RUbot_doReset!.") {
@@ -224,7 +226,64 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
 
   try {
     if ("/start" === message.text) {
-      // TODO: 2025/5/6 Introduction words for various scenarios
+      // Introduction words for various scenarios
+      let introduction = "*Welcome\\!*" +
+          "\n>I'm a PM bot\\." +
+          "\n>I'll forward your messages to my owner, and vice versa\\." +
+          "\n*There are some details below:*" +
+          "\n**>EMOJI REACTION:" +
+          "\n>  The emoji reaction 🕊 as seen below this message, indicates a successful forward\\." +
+          "\n>  If you don't see that, the message hasn't been forwarded\\." +
+          "\n>" +
+          "\n>  You can tap other emoji reaction for both your and my messages\\(except this one\\), and I'll forward it as well\\." +
+          "\n>  But as a bot, limited by TG, I can only send ONE FREE emoji reaction for each message\\." +
+          "\n>  So that if you're a tg\\-premium\\-user and tap many emoji reactions for one message\\. I'll only forward the last one if it's a free emoji\\.||" +
+          "\n**>EDIT MESSAGE:" +
+          "\n>  You can edit your message as usual, but ONLY TEXT message\\." +
+          "\n>  If forward success, the emoji reaction 🦄 will swiftly appear and quickly revert to 🕊\\." +
+          "\n>  If you don't see that, the EDITING hasn't been forwarded\\." +
+          "\n>  But you can try edit AGAIN with DIFFERENT CONTENT\\.||" +
+          "\n**>DELETE MESSAGE:" +
+          "\n>  Work In Process\\.||";
+      if (fromUser.id.toString() === ownerUid) {
+        // TODO: 2025/5/9 for owner
+        introduction += "\n" +
+            "\n*The content below is ONLY visible for bot owner\\.* " +
+            "\n*Valid commands in here:";
+        if (message.message_thread_id) {
+          introduction +=
+              "\n**> BAN THIS TOPIC" +
+              "\n>  expand to see them\\." +
+              "\n>  balabalabala||" +
+              "\n";
+        } else {
+          introduction +=
+              "\n**> BAN THIS TOPIC" +
+              "\n>  expand to see them\\." +
+              "\n>  balabalabala||" +
+              "\n";
+        }
+      }
+      const sendMessageResp = await (await postToTelegramApi(botToken, 'sendMessage', {
+        chat_id: fromChat.id,
+        text: introduction,
+        message_thread_id: message.message_thread_id,
+        parse_mode: "MarkdownV2",
+      })).json();
+      if (sendMessageResp.ok) {
+        await postToTelegramApi(botToken, 'setMessageReaction', {
+          chat_id: fromChat.id,
+          message_id: sendMessageResp.result.message_id,
+          reaction: [{ type: "emoji", emoji: "🕊" }]
+        });
+      } else {
+        // TODO: 2025/5/9
+        await postToTelegramApi(botToken, 'sendMessage', {
+          chat_id: fromChat.id,
+          message_thread_id: message.message_thread_id,
+          text: `resp: ${JSON.stringify(sendMessageResp)}`,
+        })
+      }
       return new Response('OK');
     }
 
@@ -240,7 +299,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
       if (message.forum_topic_created || message.pinned_message) {
         // ignore message types
         return new Response('OK');
-      } else if (message.from.id.toString() === ownerUid && fromChat.id === superGroupChatId
+      } else if (fromUser.id.toString() === ownerUid && fromChat.id === superGroupChatId
           && fromChat.is_forum && message.is_topic_message) {
         // topic PM send to others
         await processPMSent(botToken, message, topicToFromChat);
