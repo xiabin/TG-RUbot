@@ -11,6 +11,8 @@ import {
   parseMetaDataMessage,
   processERReceived,
   processERSent,
+  processPMEditReceived,
+  processPMEditSent,
   processPMReceived,
   processPMSent,
   reset,
@@ -105,7 +107,45 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
   // --- for debugging ---
 
   if (update.edited_message) {
-    return new Response('OK');
+    try {
+      const messageEdited = update.edited_message
+      const fromChat = messageEdited.chat;
+      const fromUser = messageEdited.from;
+
+      const check = await doCheckInit(botToken, ownerUid)
+      if (!check.failed) {
+        const metaDataMessage = check.checkMetaDataMessageResp.result.pinned_message;
+        const {
+          superGroupChatId,
+          topicToFromChat,
+          fromChatToTopic,
+          bannedTopics
+        } = parseMetaDataMessage(metaDataMessage);
+        if (false) {
+          // ignore message types
+          return new Response('OK');
+        } else if (fromUser.id.toString() === ownerUid && fromChat.id === superGroupChatId
+            && fromChat.is_forum) {
+          // topic ER send to others.
+          await processPMEditSent(botToken, messageEdited, superGroupChatId, topicToFromChat);
+        } else {
+          // topic ER receive from others.
+          if (!bannedTopics.includes(fromChatToTopic.get(fromChat.id))) {
+            await processPMEditReceived(botToken, ownerUid, messageEdited, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage)
+          }
+        }
+        return new Response('OK');
+      }
+      return new Response('OK');
+    } catch (error) {
+      // --- for debugging ---
+      await postToTelegramApi(botToken, 'sendMessage', {
+        chat_id: ownerUid,
+        text: `Error! You can send the message to developer for getting help : ${error.message} Stack: ${error.stack} origin: ${JSON.stringify(update)}`,
+      });
+      // --- for debugging ---
+      return new Response('OK');
+    }
   }
 
   if (update.message_reaction) {
@@ -134,7 +174,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
         } else {
           // topic ER receive from others.
           if (!bannedTopics.includes(fromChatToTopic.get(fromChat.id))) {
-            await processERReceived(botToken, ownerUid, messageReaction, superGroupChatId, bannedTopics);
+            await processERReceived(botToken, ownerUid, fromUser, messageReaction, superGroupChatId, bannedTopics);
           }
         }
         return new Response('OK');
@@ -249,7 +289,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
         // TODO: 2025/5/9 for owner
         introduction += "\n" +
             "\n*The content below is ONLY visible for bot owner\\.* " +
-            "\n*Valid commands in here:";
+            "\n*Valid commands in here:*";
         if (message.message_thread_id) {
           introduction +=
               "\n**> BAN THIS TOPIC" +
@@ -277,7 +317,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
           reaction: [{ type: "emoji", emoji: "🕊" }]
         });
       } else {
-        // TODO: 2025/5/9
+        // TODO: 2025/5/9 for parse_mode test
         await postToTelegramApi(botToken, 'sendMessage', {
           chat_id: fromChat.id,
           message_thread_id: message.message_thread_id,

@@ -35,7 +35,7 @@ export async function motherBotCommands(botToken, ownerUid, message, childBotUrl
     } else {
       await postToTelegramApi(botToken, 'sendMessage', {
         chat_id: message.chat.id,
-        text: `has no this command! Try '/install {{botToken}}' OR '/uninstall {{botToken}}'`,
+        text: `Has no this command! Try '/install {{botToken}}' OR '/uninstall {{botToken}}'`,
       });
     }
     return new Response('OK');
@@ -347,7 +347,7 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
 
   // topic has been banned
   if (bannedTopics.includes(topicId) && isTopicExists) {
-    return
+    return { success: false }
   }
 
   if (!isTopicExists) {
@@ -355,8 +355,7 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
     await cleanItemOnMetaData(botToken, metaDataMessage, ownerUid, topicId);
     fromChatToTopic.delete(fromChatId)
     // resend the message
-    await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage)
-    return
+    return await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage)
   }
 
   // forwardMessage to topic
@@ -389,13 +388,22 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
       message_id: pmMessageId,
       reaction: [{ type: "emoji", emoji: "🕊" }]
     });
+    return {
+      success: true,
+      targetChatId: superGroupChatId,
+      targetTopicId: topicId,
+      originChatId: fromChatId,
+      originMessageId: pmMessageId,
+      newMessageId: topicMessageId
+    }
   } else if (forwardMessageResp.description.includes('message thread not found')) {
     // clean metadata message
     await cleanItemOnMetaData(botToken, metaDataMessage, ownerUid, topicId);
     fromChatToTopic.delete(fromChatId)
     // resend the message
-    await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage)
+    return await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage)
   }
+  return { success: false }
 }
 
 export async function processPMSent(botToken, message, topicToFromChat) {
@@ -422,7 +430,7 @@ export async function processPMSent(botToken, message, topicToFromChat) {
   } else {
     await postToTelegramApi(botToken, 'sendMessage', {
       chat_id: ownerUid,
-      text: `SEND MESSAGE ERROR! copyMessageResp: ${JSON.stringify(copyMessageResp)} message: ${message}`,
+      text: `SEND MESSAGE ERROR! copyMessageResp: ${JSON.stringify(copyMessageResp)} message: ${JSON.stringify(message)}`,
     });
   }
 }
@@ -449,12 +457,12 @@ async function checkMessageConnectionMetaData(botToken, superGroupChatId, failed
   return { failedMessage, failed, metaDataMessageId, metaDataMessageText, metaDataMessage };
 }
 
-async function checkMessageConnectionMetaDataForAction(botToken, superGroupChatId, failedMessage, ownerUid) {
+async function checkMessageConnectionMetaDataForAction(botToken, superGroupChatId, failedMessage, failedMessageChatId) {
   const checkMessageConnectionMetaDataResp = await checkMessageConnectionMetaData(
       botToken, superGroupChatId, failedMessage);
   if (checkMessageConnectionMetaDataResp.failed) {
     await postToTelegramApi(botToken, 'sendMessage', {
-      chat_id: ownerUid,
+      chat_id: failedMessageChatId,
       text: failedMessage,
     });
   }
@@ -526,7 +534,7 @@ async function saveMessageConnection(botToken, superGroupChatId, topicId, topicM
 
 // ---------------------------------------- EMOJI REACTION ----------------------------------------
 
-export async function processERReceived(botToken, ownerUid, messageReaction, superGroupChatId, bannedTopics) {
+export async function processERReceived(botToken, ownerUid, fromUser, messageReaction, superGroupChatId, bannedTopics) {
   const pmMessageId = messageReaction.message_id;
   let topicId;
   let topicMessageId;
@@ -554,7 +562,7 @@ export async function processERReceived(botToken, ownerUid, messageReaction, sup
     return;
   }
 
-  if (reaction.length === 0) {
+  if (reaction.length === 0 && fromUser.id === ownerUid) {
     reaction = [
       {
         "type": "emoji",
@@ -596,6 +604,7 @@ export async function processERSent(botToken, messageReaction, topicToFromChat) 
     return;
   }
 
+  // TODO: 2025/5/10 if react on owner's message, there's no need for a 🕊
   if (reaction.length === 0) {
     reaction = [
       {
@@ -631,6 +640,134 @@ async function sendEmojiReaction(botToken, targetChatId, targetMessageId, reacti
       // --- for debugging ---
     }
   }
+}
+
+// ---------------------------------------- EDIT MESSAGE ----------------------------------------
+
+export async function processPMEditReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage) {
+  const { success: isForwardSuccess, targetChatId, targetTopicId, originChatId, originMessageId, newMessageId } =
+      await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage)
+  if (isForwardSuccess) {
+    const checkMessageConnectionMetaDataResp =
+        await checkMessageConnectionMetaDataForAction(botToken, superGroupChatId,
+            `Can't find ORIGIN message for RECEIVED message editing.`, ownerUid);
+
+    let newMessageLink = `https://t.me/c/${targetChatId}/${targetTopicId}/${newMessageId}`;
+    if (targetChatId.toString().startsWith("-100")) {
+      newMessageLink = `https://t.me/c/${targetChatId.toString().substring(4)}/${targetTopicId}/${newMessageId}`;
+    }
+
+    let oldMessageId;
+    let oldMessageLink;
+    const messageConnectionTextSplit = checkMessageConnectionMetaDataResp.metaDataMessageText?.split(';');
+    if (messageConnectionTextSplit) {
+      for (let i = 0; i < messageConnectionTextSplit.length; i++) {
+        const messageConnectionTextSplitSplit = messageConnectionTextSplit[i].split(':');
+        if (originMessageId === parseInt(messageConnectionTextSplitSplit[1])) {
+          const topicMessageMetaData = messageConnectionTextSplitSplit[0];
+          const topicMessageMetaDataSplit = topicMessageMetaData.split('-');
+          oldMessageId = parseInt(topicMessageMetaDataSplit[1]);
+          break;
+        }
+      }
+      oldMessageLink = oldMessageId ? `https://t.me/c/${targetChatId}/${targetTopicId}/${oldMessageId}` : '';
+      if (oldMessageId && targetChatId.toString().startsWith("-100")) {
+        oldMessageLink = `https://t.me/c/${targetChatId.toString().substring(4)}/${targetTopicId}/${oldMessageId}`;
+      }
+    }
+
+    let text = `⬆️⬆️⬆️⬆️⬆️⬆️`;
+    if (oldMessageLink) {
+      text += `\n*[Message](${newMessageLink}) edited from [MESSAGE](${oldMessageLink})*`;
+    } else {
+      text += `\n*[Message](${newMessageLink}) edited from unknown*`;
+    }
+    await postToTelegramApi(botToken, 'sendMessage', {
+      chat_id: targetChatId,
+      message_thread_id: targetTopicId,
+      text: text,
+      parse_mode: "MarkdownV2",
+    });
+    await notifyMessageEditForward(botToken, originChatId, originMessageId);
+  }
+}
+
+export async function processPMEditSent(botToken, message, superGroupChatId, topicToFromChat) {
+  const ownerUid = message.from.id;
+  const topicId = message.message_thread_id;
+  const topicMessageId = message.message_id;
+  const pmChatId = topicToFromChat.get(message.message_thread_id);
+  let pmMessageId;
+
+  const checkMessageConnectionMetaDataResp =
+      await checkMessageConnectionMetaDataForAction(botToken, superGroupChatId,
+          `Can't find TARGET message for SENT message editing.`, ownerUid);
+  if (checkMessageConnectionMetaDataResp.failed) return;
+
+  const messageConnectionTextSplit = checkMessageConnectionMetaDataResp.metaDataMessageText.split(';').reverse();
+  for (let i = 0; i < messageConnectionTextSplit.length; i++) {
+    const messageConnectionTextSplitSplit = messageConnectionTextSplit[i].split(':');
+    const topicMessageMetaData = messageConnectionTextSplitSplit[0];
+    const topicMessageMetaDataSplit = topicMessageMetaData.split('-');
+    if (topicMessageId === parseInt(topicMessageMetaDataSplit[1])) {
+      pmMessageId = messageConnectionTextSplitSplit[1];
+      break;
+    }
+  }
+
+  let oldMessageLink = `https://t.me/c/${superGroupChatId}/${topicId}/${topicMessageId}`;
+  if (superGroupChatId.toString().startsWith("-100")) {
+    oldMessageLink = `https://t.me/c/${superGroupChatId.toString().substring(4)}/${topicId}/${topicMessageId}`;
+  }
+  if (!pmMessageId) {
+    await postToTelegramApi(botToken, 'sendMessage', {
+      chat_id: superGroupChatId,
+      message_thread_id: topicId,
+      text: `Can't find TARGET message for SENT [message](${oldMessageLink}) editing\\.`,
+      parse_mode: "MarkdownV2",
+    });
+    return;
+  }
+
+  if (message.text) {
+    const editMessageTextResp = await (await postToTelegramApi(botToken, 'editMessageText', {
+      chat_id: pmChatId,
+      message_id: pmMessageId,
+      text: message.text,
+      parse_mode: message.parse_mode,
+      entities: message.entities,
+    })).json();
+    if (editMessageTextResp.ok) {
+      // notify sending status by MessageReaction
+      await notifyMessageEditForward(botToken, superGroupChatId, topicMessageId);
+    } else {
+      await postToTelegramApi(botToken, 'sendMessage', {
+        chat_id: ownerUid,
+        text: `SEND EDITED MESSAGE ERROR! editMessageTextResp: ${JSON.stringify(editMessageTextResp)} message: ${JSON.stringify(message)}`,
+      });
+    }
+  } else if (false) {
+    // TODO: 2025/5/10 editMessageCaption
+  } else if (false) {
+    // TODO: 2025/5/10 editMessageMedia
+  } else if (false) {
+    // TODO: 2025/5/10 editMessageLiveLocation
+  } else if (false) {
+    // TODO: 2025/5/10 stopMessageLiveLocation
+  }
+}
+
+async function notifyMessageEditForward(botToken, fromChatId, fromMessageId) {
+  await postToTelegramApi(botToken, 'setMessageReaction', {
+    chat_id: fromChatId,
+    message_id: fromMessageId,
+    reaction: [{ type: "emoji", emoji: "🦄" }]
+  });
+  await postToTelegramApi(botToken, 'setMessageReaction', {
+    chat_id: fromChatId,
+    message_id: fromMessageId,
+    reaction: [{ type: "emoji", emoji: "🕊" }]
+  });
 }
 
 // ---------------------------------------- BAN TOPIC ----------------------------------------
