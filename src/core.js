@@ -11,6 +11,7 @@ import {
   parseMetaDataMessage,
   processERReceived,
   processERSent,
+  processPMDeleteSent,
   processPMEditReceived,
   processPMEditSent,
   processPMReceived,
@@ -396,6 +397,8 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
       return new Response('OK');
     }
 
+
+    const reply = message.reply_to_message;
     const check = await doCheckInit(botToken, ownerUid)
     if (!check.failed) {
       const metaDataMessage = check.checkMetaDataMessageResp.result.pinned_message;
@@ -410,16 +413,24 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
         return new Response('OK');
       } else if (fromUser.id.toString() === ownerUid && fromChat.id === superGroupChatId
           && fromChat.is_forum && message.is_topic_message) {
-        // topic PM send to others
-        await processPMSent(botToken, message, topicToFromChat);
+        if (message.text === "#del" && reply?.message_id && reply?.from.id === fromUser.id && reply?.message_id !== message.message_thread_id) {
+          // delete message
+          await processPMDeleteSent(botToken, message, reply, superGroupChatId, topicToFromChat);
+        } else {
+          // topic PM send to others
+          await processPMSent(botToken, message, topicToFromChat);
+        }
       } else {
-        // topic PM receive from others. Always receive first.
-        await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage);
+        if (message.text === "#del" && reply?.message_id && reply?.from.id === fromUser.id) {
+          // TODO: 2025/5/11 delete message
+        } else {
+          // topic PM receive from others. Always receive first.
+          await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage);
+        }
       }
       return new Response('OK');
     }
 
-    const reply = message.reply_to_message;
     if (reply && fromChat.id.toString() === ownerUid) {
       const rm = reply.reply_markup;
       if (rm && rm.inline_keyboard && rm.inline_keyboard.length > 0) {

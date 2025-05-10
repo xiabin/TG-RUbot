@@ -667,7 +667,7 @@ export async function processPMEditReceived(botToken, ownerUid, message, superGr
   if (isForwardSuccess) {
     const checkMessageConnectionMetaDataResp =
         await checkMessageConnectionMetaDataForAction(botToken, superGroupChatId,
-            `Can't find ORIGIN message for RECEIVED message editing.`, ownerUid);
+            `Can't find ORIGIN message for RECEIVED message EDITING.`, ownerUid);
 
     let newMessageLink = `https://t.me/c/${targetChatId}/${targetTopicId}/${newMessageId}`;
     if (targetChatId.toString().startsWith("-100")) {
@@ -718,7 +718,7 @@ export async function processPMEditSent(botToken, message, superGroupChatId, top
 
   const checkMessageConnectionMetaDataResp =
       await checkMessageConnectionMetaDataForAction(botToken, superGroupChatId,
-          `Can't find TARGET message for SENT message editing.`, ownerUid);
+          `Can't find TARGET message for sent message editing.`, ownerUid);
   if (checkMessageConnectionMetaDataResp.failed) return;
 
   const messageConnectionTextSplit = checkMessageConnectionMetaDataResp.metaDataMessageText.split(';').reverse();
@@ -740,7 +740,7 @@ export async function processPMEditSent(botToken, message, superGroupChatId, top
     await postToTelegramApi(botToken, 'sendMessage', {
       chat_id: superGroupChatId,
       message_thread_id: topicId,
-      text: `Can't find TARGET message for SENT [message](${oldMessageLink}) editing\\.`,
+      text: `Can't find TARGET message for sent [message](${oldMessageLink}) EDITING\\.`,
       parse_mode: "MarkdownV2",
     });
     return;
@@ -760,7 +760,8 @@ export async function processPMEditSent(botToken, message, superGroupChatId, top
     } else {
       await postToTelegramApi(botToken, 'sendMessage', {
         chat_id: ownerUid,
-        text: `SEND EDITED MESSAGE ERROR! editMessageTextResp: ${JSON.stringify(editMessageTextResp)} message: ${JSON.stringify(message)}`,
+        text: `SEND EDITED MESSAGE ERROR! editMessageTextResp: ${JSON.stringify(editMessageTextResp)} message: ${JSON.stringify(message)}.` +
+            `\nYou can send this to developer for getting help, or just delete this message.`,
       });
     }
   } else if (false) {
@@ -785,6 +786,85 @@ async function notifyMessageEditForward(botToken, fromChatId, fromMessageId) {
     chat_id: fromChatId,
     message_id: fromMessageId,
     reaction: [{ type: "emoji", emoji: "🕊" }]
+  });
+}
+
+// ---------------------------------------- DELETE MESSAGE ----------------------------------------
+
+export async function processPMDeleteSent(botToken, message, reply, superGroupChatId, topicToFromChat) {
+  const ownerUid = message.from.id;
+  const commandMessageId = message.message_id;
+  const topicId = message.message_thread_id;
+  const deleteOriginMessageId = reply.message_id;
+  const pmChatId = topicToFromChat.get(message.message_thread_id);
+  let deleteTargetMessageId;
+
+  const checkMessageConnectionMetaDataResp =
+      await checkMessageConnectionMetaDataForAction(botToken, superGroupChatId,
+          `Can't find TARGET message for sent message DELETING.`, ownerUid);
+  if (checkMessageConnectionMetaDataResp.failed) return;
+
+  const messageConnectionTextSplit = checkMessageConnectionMetaDataResp.metaDataMessageText.split(';').reverse();
+  for (let i = 0; i < messageConnectionTextSplit.length; i++) {
+    const messageConnectionTextSplitSplit = messageConnectionTextSplit[i].split(':');
+    const topicMessageMetaData = messageConnectionTextSplitSplit[0];
+    const topicMessageMetaDataSplit = topicMessageMetaData.split('-');
+    if (deleteOriginMessageId === parseInt(topicMessageMetaDataSplit[1])) {
+      deleteTargetMessageId = messageConnectionTextSplitSplit[1];
+      break;
+    }
+  }
+
+  let originMessageLink = `https://t.me/c/${superGroupChatId}/${topicId}/${deleteOriginMessageId}`;
+  if (superGroupChatId.toString().startsWith("-100")) {
+    originMessageLink = `https://t.me/c/${superGroupChatId.toString().substring(4)}/${topicId}/${deleteOriginMessageId}`;
+  }
+  if (!deleteTargetMessageId) {
+    await postToTelegramApi(botToken, 'sendMessage', {
+      chat_id: superGroupChatId,
+      message_thread_id: topicId,
+      text: `Can't find TARGET message for sent [message](${originMessageLink}) DELETING\\.`,
+      parse_mode: "MarkdownV2",
+    });
+    return;
+  }
+
+  if (message.text) {
+    const deleteMessageResp = await (await postToTelegramApi(botToken, 'deleteMessage', {
+      chat_id: pmChatId,
+      message_id: deleteTargetMessageId,
+    })).json();
+    if (deleteMessageResp.ok) {
+      // notify sending status by MessageReaction
+      await notifyMessageDeleteForward(botToken, superGroupChatId, deleteOriginMessageId, commandMessageId, topicId);
+    } else {
+      await postToTelegramApi(botToken, 'sendMessage', {
+        chat_id: superGroupChatId,
+        message_thread_id: topicId,
+        text: `SEND DELETING MESSAGE ERROR! deleteMessageResp: ${JSON.stringify(deleteMessageResp)} message: ${JSON.stringify(message)}.` +
+            `\nYou can send this to developer for getting help, or just delete this message.`,
+      });
+    }
+  }
+}
+
+async function notifyMessageDeleteForward(botToken, fromChatId, fromMessageId, commandMessageId, fromTopicId) {
+  let originMessageLink = `https://t.me/c/${fromChatId}/${fromTopicId}/${fromMessageId}`;
+  if (fromChatId.toString().startsWith("-100")) {
+    originMessageLink = `https://t.me/c/${fromChatId.toString().substring(4)}/${fromTopicId}/${fromMessageId}`;
+  }
+  let commandMessageLink = `https://t.me/c/${fromChatId}/${fromTopicId}/${commandMessageId}`;
+  if (fromChatId.toString().startsWith("-100")) {
+    commandMessageLink = `https://t.me/c/${fromChatId.toString().substring(4)}/${fromTopicId}/${commandMessageId}`;
+  }
+  await postToTelegramApi(botToken, 'sendMessage', {
+    chat_id: fromChatId,
+    message_thread_id: fromTopicId,
+    text: `*[MESSAGE](${originMessageLink}) has been DELETED*\\.` +
+        `\nYou can delete the *[ORIGIN MESSAGE](${originMessageLink})*` +
+        ` and *[COMMAND MESSAGE](${commandMessageLink})*` +
+        ` and *\\[THIS MESSAGE\\]* for yourself\\.`,
+    parse_mode: "MarkdownV2",
   });
 }
 
