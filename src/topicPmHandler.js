@@ -170,6 +170,7 @@ export function parseMetaDataMessage(metaDataMessage) {
     for (let i = 1; i < metaDataSplit.length; i++) {
       const topicToFromChatSplit = metaDataSplit[i].split(":");
       const topic = parseInt(topicToFromChatSplit[0]);
+      if (!topic) continue
       let fromChat;
       if (topicToFromChatSplit[1].startsWith('b')) {
         bannedTopics.push(topic);
@@ -186,27 +187,34 @@ export function parseMetaDataMessage(metaDataMessage) {
 
 async function addTopicToFromChatOnMetaData(botToken, metaDataMessage, ownerUid, topicId, fromChatId) {
   const newText = `${metaDataMessage.text};${topicId}:${fromChatId}`
-  await postToTelegramApi(botToken, 'editMessageText', {
-    chat_id: ownerUid,
-    message_id: metaDataMessage.message_id,
-    text: newText,
-  });
-  return { messageText: newText };
+  // TODO: 2025/5/10 MAX LENGTH 4096
+  return await editMetaDataMessage(botToken, ownerUid, metaDataMessage, newText);
 }
 
 async function cleanItemOnMetaData(botToken, metaDataMessage, ownerUid, topicId) {
   const oldText = metaDataMessage.text;
   let itemStartIndex = oldText.indexOf(`;${topicId}:`) + 1;
+  if (itemStartIndex === 0) return { messageText: oldText };
   let itemEndIndex = oldText.indexOf(';', itemStartIndex);
   let newText = itemEndIndex === -1 ? oldText.substring(0, itemStartIndex - 1)
       : oldText.replace(oldText.substring(itemStartIndex, itemEndIndex + 1), '');
-  await postToTelegramApi(botToken, 'editMessageText', {
+  return await editMetaDataMessage(botToken, ownerUid, metaDataMessage, newText);
+}
+
+async function editMetaDataMessage(botToken, ownerUid, metaDataMessage, newText) {
+  const editMessageTextResp = await (await postToTelegramApi(botToken, 'editMessageText', {
     chat_id: ownerUid,
     message_id: metaDataMessage.message_id,
     text: newText,
-  });
-  metaDataMessage.text = newText;
-  return { messageText: newText };
+  })).json();
+  if (!editMessageTextResp.ok) {
+    await postToTelegramApi(botToken, 'sendMessage', {
+      chat_id: ownerUid,
+      text: `editMetaDataMessage: editMessageTextResp: ${JSON.stringify(editMessageTextResp)}`,
+    });
+  }
+  metaDataMessage.text = editMessageTextResp.result.text;
+  return { messageText: editMessageTextResp.result.text };
 }
 
 async function banTopicOnMetaData(botToken, ownerUid, metaDataMessage, topicId) {
@@ -268,6 +276,7 @@ export async function reset(botToken, ownerUid, message, inOwnerChat) {
           text: `Can't reset from group isn't current using!`,
         });
       }
+      return new Response('OK');
     } else {
       await postToTelegramApi(botToken, 'sendMessage', {
         chat_id: ownerUid,
@@ -304,7 +313,7 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
       if (topicName.length > 128) {
         return newTopicName;
       } else {
-        return topicName
+        return topicName;
       }
     }
     topicName = lengthCheckDo(topicName, `${fromChatName} (${fromChatId})`);
@@ -315,6 +324,13 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
       name: topicName,
     })).json();
     topicId = createTopicResp.result?.message_thread_id
+    if (!createTopicResp.ok || !topicId) {
+      await postToTelegramApi(botToken, 'sendMessage', {
+        chat_id: ownerUid,
+        text: `DEBUG MESSAGE! chatId: ${superGroupChatId} topicName: ${topicName} createTopicResp: ${JSON.stringify(createTopicResp)}`,
+      });
+      return;
+    }
     await addTopicToFromChatOnMetaData(botToken, metaDataMessage, ownerUid, topicId, fromChatId);
     isNewTopic = true;
   }
@@ -335,7 +351,7 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
   if (!isTopicExists) {
     // clean metadata message
     await cleanItemOnMetaData(botToken, metaDataMessage, ownerUid, topicId);
-    fromChatToTopic.delete(topicId)
+    fromChatToTopic.delete(fromChatId)
     // resend the message
     await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage)
     return
@@ -374,7 +390,7 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
   } else if (forwardMessageResp.description.includes('message thread not found')) {
     // clean metadata message
     await cleanItemOnMetaData(botToken, metaDataMessage, ownerUid, topicId);
-    fromChatToTopic.delete(topicId)
+    fromChatToTopic.delete(fromChatId)
     // resend the message
     await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage)
   }
