@@ -304,21 +304,22 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
   const pmMessageId = message.message_id;
   let topicId = fromChatToTopic.get(fromChatId);
   let isNewTopic = false;
-  let fromChatName
-  if (!topicId) {
-    fromChatName = fromChat.username ?
-        `@${fromChat.username}` : [fromChat.first_name, fromChat.last_name].filter(Boolean).join(' ');
-    let topicName = `${fromChatName} ${fromChatId === message.from.id ? `(${fromChatId})` : `(${fromChatId})(${message.from.id})`}`
-    const lengthCheckDo = function (topicName, newTopicName) {
-      if (topicName.length > 128) {
-        return newTopicName;
-      } else {
-        return topicName;
-      }
+
+  const fromChatName = fromChat.username ?
+      `@${fromChat.username}` : [fromChat.first_name, fromChat.last_name].filter(Boolean).join(' ');
+  let topicName = `${fromChatName} ${fromChatId === message.from.id ? `(${fromChatId})` : `(${fromChatId})(${message.from.id})`}`
+  const lengthCheckDo = function (topicName, newTopicName) {
+    if (topicName.length > 128) {
+      return newTopicName;
+    } else {
+      return topicName;
     }
-    topicName = lengthCheckDo(topicName, `${fromChatName} (${fromChatId})`);
-    topicName = lengthCheckDo(topicName, fromChatName);
-    topicName = lengthCheckDo(topicName, fromChatName.substring(0, 127));
+  }
+  topicName = lengthCheckDo(topicName, `${fromChatName} (${fromChatId})`);
+  topicName = lengthCheckDo(topicName, fromChatName);
+  topicName = lengthCheckDo(topicName, fromChatName.substring(0, 127));
+
+  if (!topicId) {
     const createTopicResp = await (await postToTelegramApi(botToken, 'createForumTopic', {
       chat_id: superGroupChatId,
       name: topicName,
@@ -336,9 +337,10 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
   }
 
   const isTopicExists = await (async function () {
-    const reopenForumTopicResp = await (await postToTelegramApi(botToken, 'reopenForumTopic', {
+    const reopenForumTopicResp = await (await postToTelegramApi(botToken, 'editForumTopic', {
       chat_id: superGroupChatId,
       message_thread_id: topicId,
+      name: topicName,
     })).json();
     return reopenForumTopicResp.ok || !reopenForumTopicResp.description.includes("TOPIC_ID_INVALID");
   })()
