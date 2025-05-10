@@ -284,23 +284,91 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
           "\n>  If you don't see that, the EDITING hasn't been forwarded\\." +
           "\n>  But you can try edit AGAIN with DIFFERENT CONTENT\\.||" +
           "\n**>DELETE MESSAGE:" +
-          "\n>  Work In Process\\.||";
+          "\n>  Work In Process" +
+          "\\.||";
       if (fromUser.id.toString() === ownerUid) {
-        // TODO: 2025/5/9 for owner
+        // for owner only
         introduction += "\n" +
-            "\n*The content below is ONLY visible for bot owner\\.* " +
-            "\n*Valid commands in here:*";
-        if (message.message_thread_id) {
+            "\n*The content below is ONLY visible and valid for bot owner\\.*" +
+            "\n" +
+            "\n*For Help*" +
+            "\nThis bot is totally *open source* and *free* to use\\. You can mail to *vivalavida@linux\\.do* for getting help\\. " +
+            "\nOr you can connect on [Linux Do](https://linux.do/t/topic/620510?u=ru_sirius)\\." +
+            "\n";
+        if (fromChat.is_forum && message.is_topic_message) {
+          // commands in PM topic
           introduction +=
-              "\n**> BAN THIS TOPIC" +
-              "\n>  expand to see them\\." +
-              "\n>  balabalabala||" +
+              "\n*Commands in other places:*" +
+              "\nIn a personal chat with the bot:" +
+              "\n`.!pm_RUbot_doReset!.`" +
+              "\nIn the general topic of the PM chat super group:" +
+              "\n`.!pm_RUbot_checkInit!.`" +
+              "\n`.!pm_RUbot_doInit!.`" +
+              "\n`.!pm_RUbot_doReset!.`" +
+              "\n" +
+              "\n*Valid commands in here:*" +
+              "\n*BAN THIS TOPIC*" +
+              "\n➡️`.!pm_RUbot_ban!.`⬅️" +
+              "\n↗️*Press or Click to copy:*⬆️" +
+              "\n**>DESCRIPTION:" +
+              "\n>Block the topic where the command was sent," +
+              " stop forwarding messages from the corresponding chat," +
+              " and send a message to inform the other party that they have been banned\\.||" +
+              "\n➡️`.!pm_RUbot_unban!.`⬅️" +
+              "\n↗️*Press or Click to copy:*⬆️" +
+              "\n**>DESCRIPTION:" +
+              "\n>Unblock the topic where the command was sent," +
+              " and send a message to inform the other party that they have been unbanned\\.||" +
+              "\n➡️`.!pm_RUbot_silent_ban!.`⬅️" +
+              "\n↗️*Press or Click to copy:*⬆️" +
+              "\n**>DESCRIPTION:" +
+              "\n>Block the topic where the command was sent\\." +
+              " stop forwarding messages from the corresponding chat\\.||" +
+              "\n➡️`.!pm_RUbot_silent_unban!.`⬅️" +
+              "\n↗️*Press or Click to copy:*⬆️" +
+              "\n**>DESCRIPTION:" +
+              "\n>Unblock the topic where the command was sent\\.||";
+        } else if (fromChat.is_forum) {
+          // commands in General topic
+          introduction +=
+              "\n*Commands in other places:*" +
+              "\nIn a personal chat with the bot:" +
+              "\n`.!pm_RUbot_doReset!.`" +
+              "\nIn the corresponding PM chat Topic:" +
+              "\n`.!pm_RUbot_ban!.`" +
+              "\n`.!pm_RUbot_unban!.`" +
+              "\n`.!pm_RUbot_silent_ban!.`" +
+              "\n`.!pm_RUbot_silent_unban!.`" +
+              "\n" +
+              "\n*Valid commands in here:*" +
+              "\n➡️`.!pm_RUbot_checkInit!.`⬅️" +
+              "\n↗️*Press or Click to copy:*⬆️" +
+              "\n>Check the initialization status, and the result reply is in the personal chat with the robot\\." +
+              "\n➡️`.!pm_RUbot_doInit!.`⬅️" +
+              "\n↗️*Press or Click to copy:*⬆️" +
+              "\n>Perform initial settings, and the result reply is in the personal chat with the robot\\." +
+              "\n➡️`.!pm_RUbot_doReset!.`⬅️" +
+              "\n↗️*Press or Click to copy:*⬆️" +
+              "\n>Reset the settings, and the result reply is in the personal chat with the robot\\." +
               "\n";
         } else {
+          // commands in bot chat
           introduction +=
-              "\n**> BAN THIS TOPIC" +
-              "\n>  expand to see them\\." +
-              "\n>  balabalabala||" +
+              "\n*Commands in other places:*" +
+              "\nIn the general topic of the PM chat super group:" +
+              "\n`.!pm_RUbot_checkInit!.`" +
+              "\n`.!pm_RUbot_doInit!.`" +
+              "\n`.!pm_RUbot_doReset!.`" +
+              "\nIn the corresponding PM chat Topic:" +
+              "\n`.!pm_RUbot_ban!.`" +
+              "\n`.!pm_RUbot_unban!.`" +
+              "\n`.!pm_RUbot_silent_ban!.`" +
+              "\n`.!pm_RUbot_silent_unban!.`" +
+              "\n " +
+              "\n*Valid commands in here:*" +
+              "\n➡️`.!pm_RUbot_doReset!.`⬅️" +
+              "\n↗️*Press or Click to copy:*⬆️" +
+              "\n>Reset the settings\\." +
               "\n";
         }
       }
