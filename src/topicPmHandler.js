@@ -373,12 +373,29 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
       if (superGroupChatId.toString().startsWith("-100")) {
         messageLink = `https://t.me/c/${superGroupChatId.toString().substring(4)}/${topicId}/${topicMessageId}`
       }
-      await postToTelegramApi(botToken, 'sendMessage', {
+      const text = `${messageLink
+          ? `New PM chat from ${fromChatName.replaceAll("(", "\\(")
+              .replaceAll(")", "\\)")
+              .replaceAll("-", "\\-")}` +
+          `\n[Click the to view it in your SUPERGROUP](${messageLink})`
+          : `New PM chat from ${fromChatName.replaceAll("(", "\\(")
+              .replaceAll(")", "\\)")
+              .replaceAll("-", "\\-")}` +
+          `\nGo view it in your SUPERGROUP`}`
+      const sendMessageResp = await (await postToTelegramApi(botToken, 'sendMessage', {
         chat_id: ownerUid,
-        text: `${messageLink
-            ? `New PM chat from ${fromChatName}.\nClick the link below to view it in your PM_SUPERGROUP:\n${messageLink}`
-            : `New PM chat from ${fromChatName}, Go view it in your PM_SUPERGROUP`}`,
-      });
+        text: text,
+        parse_mode: "MarkdownV2",
+        link_preview_options: { is_disabled: true },
+      })).json();
+      if (!sendMessageResp.ok) {
+        // TODO: 2025/5/9 for parse_mode test
+        await postToTelegramApi(botToken, 'sendMessage', {
+          chat_id: fromChat.id,
+          message_thread_id: message.message_thread_id,
+          text: `text: ${text} resp: ${JSON.stringify(sendMessageResp)}`,
+        })
+      }
     }
     // save messageId connection to superGroupChat pin message
     await saveMessageConnection(botToken, superGroupChatId, topicId, topicMessageId, pmMessageId, ownerUid);

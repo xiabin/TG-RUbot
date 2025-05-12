@@ -377,7 +377,6 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
         text: introduction,
         message_thread_id: message.message_thread_id,
         parse_mode: "MarkdownV2",
-        entities: [],
         link_preview_options: { is_disabled: true },
       })).json();
       if (sendMessageResp.ok) {
