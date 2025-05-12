@@ -279,17 +279,17 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
           "\n>  But as a bot, limited by TG, I can only send ONE FREE emoji reaction for each message\\." +
           "\n>  So that if you're a tg\\-premium\\-user and tap many emoji reactions for one message\\. I'll only forward the last one if it's a free emoji\\.||" +
           "\n**>EDIT MESSAGE:" +
-          "\n>  You can edit your message as usual, but ONLY TEXT message\\." +
-          "\n>  If forward success, the emoji reaction 🦄 will swiftly appear and quickly revert to 🕊\\." +
+          "\n>  You can edit your message as usual, but ONLY TEXT message for now\\. " +
+          "If forward success, the emoji reaction 🦄 will swiftly appear and revert to 🕊 after about 1s\\." +
           "\n>  If you don't see that, the EDITING hasn't been forwarded\\." +
-          "\n>  But you can try edit AGAIN with DIFFERENT CONTENT\\.||" +
+          "\n>  Perhaps you miss seeing that, you can try edit AGAIN with DIFFERENT CONTENT\\.||" +
           "\n**>DELETE MESSAGE:" +
           "\n>  Work In Process" +
           "\\.||";
       if (fromUser.id.toString() === ownerUid) {
         // for owner only
         introduction += "\n" +
-            "\n*The content below is ONLY visible and valid for bot owner\\.*" +
+            "\n*The contents below are ONLY visible and valid for bot owner\\.*" +
             "\n" +
             "\n*For Help*" +
             "\nThis bot is totally *open source* and *free* to use\\. You can mail to *vivalavida@linux\\.do* for getting help\\. " +
@@ -377,6 +377,8 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
         text: introduction,
         message_thread_id: message.message_thread_id,
         parse_mode: "MarkdownV2",
+        entities: [],
+        link_preview_options: { is_disabled: true },
       })).json();
       if (sendMessageResp.ok) {
         await postToTelegramApi(botToken, 'setMessageReaction', {

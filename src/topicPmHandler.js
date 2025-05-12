@@ -763,6 +763,7 @@ async function notifyMessageEditForward(botToken, fromChatId, fromMessageId) {
     message_id: fromMessageId,
     reaction: [{ type: "emoji", emoji: "🦄" }]
   });
+  await new Promise(resolve => setTimeout(resolve, 1000));
   await postToTelegramApi(botToken, 'setMessageReaction', {
     chat_id: fromChatId,
     message_id: fromMessageId,
