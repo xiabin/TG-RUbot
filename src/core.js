@@ -11,6 +11,7 @@ import {
   parseMetaDataMessage,
   processERReceived,
   processERSent,
+  processPMDeleteReceived,
   processPMDeleteSent,
   processPMEditReceived,
   processPMEditSent,
@@ -422,7 +423,10 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
         }
       } else {
         if (message.text === "#del" && reply?.message_id && reply?.from.id === fromUser.id) {
-          // TODO: 2025/5/11 delete message
+          // delete message
+          if (!bannedTopics.includes(fromChatToTopic.get(fromChat.id))) {
+            await processPMDeleteReceived(botToken, ownerUid, message, reply, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage);
+          }
         } else {
           // topic PM receive from others. Always receive first.
           await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage);

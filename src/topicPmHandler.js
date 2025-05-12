@@ -667,7 +667,7 @@ export async function processPMEditReceived(botToken, ownerUid, message, superGr
   if (isForwardSuccess) {
     const checkMessageConnectionMetaDataResp =
         await checkMessageConnectionMetaDataForAction(botToken, superGroupChatId,
-            `Can't find ORIGIN message for RECEIVED message EDITING.`, ownerUid);
+            `Can't find ORIGIN message for message EDITING.`, ownerUid);
 
     let newMessageLink = `https://t.me/c/${targetChatId}/${targetTopicId}/${newMessageId}`;
     if (targetChatId.toString().startsWith("-100")) {
@@ -791,6 +791,49 @@ async function notifyMessageEditForward(botToken, fromChatId, fromMessageId) {
 
 // ---------------------------------------- DELETE MESSAGE ----------------------------------------
 
+export async function processPMDeleteReceived(botToken, ownerUid, message, reply,
+                                              superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage) {
+  const commandMessageId = message.message_id;
+  const targetChatId = superGroupChatId;
+  const originMessageId = reply.message_id;
+  const fromChat = message.chat;
+  const fromChatId = fromChat.id;
+
+  const checkMessageConnectionMetaDataResp =
+      await checkMessageConnectionMetaDataForAction(botToken, superGroupChatId,
+          `Can't find ORIGIN message for message DELETING.`, ownerUid);
+
+  let targetMessageId;
+  const messageConnectionTextSplit = checkMessageConnectionMetaDataResp.metaDataMessageText?.split(';');
+  if (messageConnectionTextSplit) {
+    for (let i = 0; i < messageConnectionTextSplit.length; i++) {
+      const messageConnectionTextSplitSplit = messageConnectionTextSplit[i].split(':');
+      if (originMessageId === parseInt(messageConnectionTextSplitSplit[1])) {
+        const topicMessageMetaData = messageConnectionTextSplitSplit[0];
+        const topicMessageMetaDataSplit = topicMessageMetaData.split('-');
+        targetMessageId = parseInt(topicMessageMetaDataSplit[1]);
+        break;
+      }
+    }
+  }
+
+  if (message.text) {
+    const deleteMessageResp = await (await postToTelegramApi(botToken, 'deleteMessage', {
+      chat_id: targetChatId,
+      message_id: targetMessageId,
+    })).json();
+    if (deleteMessageResp.ok) {
+      await notifyMessageDeleteForward(botToken, fromChatId, originMessageId, commandMessageId);
+    } else {
+      await postToTelegramApi(botToken, 'sendMessage', {
+        chat_id: fromChatId,
+        text: `SEND DELETING MESSAGE ERROR! deleteMessageResp: ${JSON.stringify(deleteMessageResp)} message: ${JSON.stringify(message)}.` +
+            `\nYou can send this to developer for getting help, or just delete this message.`,
+      });
+    }
+  }
+}
+
 export async function processPMDeleteSent(botToken, message, reply, superGroupChatId, topicToFromChat) {
   const ownerUid = message.from.id;
   const commandMessageId = message.message_id;
@@ -835,7 +878,6 @@ export async function processPMDeleteSent(botToken, message, reply, superGroupCh
       message_id: deleteTargetMessageId,
     })).json();
     if (deleteMessageResp.ok) {
-      // notify sending status by MessageReaction
       await notifyMessageDeleteForward(botToken, superGroupChatId, deleteOriginMessageId, commandMessageId, topicId);
     } else {
       await postToTelegramApi(botToken, 'sendMessage', {
@@ -849,23 +891,59 @@ export async function processPMDeleteSent(botToken, message, reply, superGroupCh
 }
 
 async function notifyMessageDeleteForward(botToken, fromChatId, fromMessageId, commandMessageId, fromTopicId) {
-  let originMessageLink = `https://t.me/c/${fromChatId}/${fromTopicId}/${fromMessageId}`;
-  if (fromChatId.toString().startsWith("-100")) {
-    originMessageLink = `https://t.me/c/${fromChatId.toString().substring(4)}/${fromTopicId}/${fromMessageId}`;
-  }
-  let commandMessageLink = `https://t.me/c/${fromChatId}/${fromTopicId}/${commandMessageId}`;
-  if (fromChatId.toString().startsWith("-100")) {
-    commandMessageLink = `https://t.me/c/${fromChatId.toString().substring(4)}/${fromTopicId}/${commandMessageId}`;
-  }
-  await postToTelegramApi(botToken, 'sendMessage', {
+  await postToTelegramApi(botToken, 'setMessageReaction', {
     chat_id: fromChatId,
-    message_thread_id: fromTopicId,
-    text: `*[MESSAGE](${originMessageLink}) has been DELETED*\\.` +
-        `\nYou can delete the *[ORIGIN MESSAGE](${originMessageLink})*` +
-        ` and *[COMMAND MESSAGE](${commandMessageLink})*` +
-        ` and *\\[THIS MESSAGE\\]* for yourself\\.`,
-    parse_mode: "MarkdownV2",
+    message_id: commandMessageId,
+    reaction: [{ type: "emoji", emoji: "🗿" }]
   });
+  if (fromTopicId) {
+    let originMessageLink = `https://t.me/c/${fromChatId}/${fromTopicId ? `${fromTopicId}/` : ''}${fromMessageId}`;
+    if (fromChatId.toString().startsWith("-100")) {
+      originMessageLink = `https://t.me/c/${fromChatId.toString().substring(4)}/${fromTopicId ? `${fromTopicId}/` : ''}${fromMessageId}`;
+    }
+    let commandMessageLink = `https://t.me/c/${fromChatId}/${fromTopicId ? `${fromTopicId}/` : ''}${commandMessageId}`;
+    if (fromChatId.toString().startsWith("-100")) {
+      commandMessageLink = `https://t.me/c/${fromChatId.toString().substring(4)}/${fromTopicId ? `${fromTopicId}/` : ''}${commandMessageId}`;
+    }
+    const sendMessageResp = await (await postToTelegramApi(botToken, 'sendMessage', {
+      chat_id: fromChatId,
+      message_thread_id: fromTopicId,
+      text: `*[MESSAGE](${originMessageLink}) has been DELETED*\\.` +
+          `These three Message will be deleted after 1s automatically\\.` +
+          `\nOr You can delete the *[ORIGIN MESSAGE](${originMessageLink})*` +
+          ` and *[COMMAND MESSAGE](${commandMessageLink})*` +
+          ` and *\\[THIS MESSAGE\\]* for yourself\\.`,
+      parse_mode: "MarkdownV2",
+    })).json();
+    if (sendMessageResp.ok) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      // delete origin message
+      await postToTelegramApi(botToken, 'deleteMessage', {
+        chat_id: fromChatId,
+        message_id: fromMessageId,
+      });
+      // delete command message
+      await postToTelegramApi(botToken, 'deleteMessage', {
+        chat_id: fromChatId,
+        message_id: commandMessageId,
+      });
+      await postToTelegramApi(botToken, 'deleteMessage', {
+        chat_id: fromChatId,
+        message_id: sendMessageResp.result.message_id,
+      });
+    }
+  } else {
+    await postToTelegramApi(botToken, 'sendMessage', {
+      chat_id: fromChatId,
+      message_thread_id: fromTopicId,
+      text: `*Message has been DELETED*\\.` +
+          `\nYou can delete the *\\[ORIGIN MESSAGE\\]*` +
+          ` and *\\[COMMAND MESSAGE\\]*` +
+          ` and *\\[THIS MESSAGE\\]* for yourself\\.` +
+          ` Limited by TG I can't do it for you, sorry\\.`,
+      parse_mode: "MarkdownV2",
+    });
+  }
 }
 
 // ---------------------------------------- BAN TOPIC ----------------------------------------
