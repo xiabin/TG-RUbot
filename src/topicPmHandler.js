@@ -187,7 +187,6 @@ export function parseMetaDataMessage(metaDataMessage) {
 
 async function addTopicToFromChatOnMetaData(botToken, metaDataMessage, ownerUid, topicId, fromChatId) {
   const newText = `${metaDataMessage.text};${topicId}:${fromChatId}`
-  // TODO: 2025/5/10 MAX LENGTH 4096
   return await editMetaDataMessage(botToken, ownerUid, metaDataMessage, newText);
 }
 
@@ -202,6 +201,7 @@ async function cleanItemOnMetaData(botToken, metaDataMessage, ownerUid, topicId)
 }
 
 async function editMetaDataMessage(botToken, ownerUid, metaDataMessage, newText) {
+  // TODO: 2025/5/10 MAX LENGTH 4096
   const editMessageTextResp = await (await postToTelegramApi(botToken, 'editMessageText', {
     chat_id: ownerUid,
     message_id: metaDataMessage.message_id,

@@ -286,12 +286,20 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
           "\n>  If you don't see that, the EDITING hasn't been forwarded\\." +
           "\n>  Perhaps you miss seeing that, you can try edit AGAIN with DIFFERENT CONTENT\\.||" +
           "\n**>DELETE MESSAGE:" +
-          "\n>  Work In Process" +
-          "\\.||";
+          "\n>  You can delete your messages I forwarded by REPLYING the origin message and TYPING `#del` to me\\." +
+          " No additional process is needed\\." +
+          "\n>  But I can only delete my own messages, not yours\\. So, you need to delete the messages for yourself," +
+          " include \\[origin message\\] \\[command message\\] and \\[notify message\\]\\.||" +
+          "\n" +
+          "\n*If you want to see this message again,*" +
+          "\n*Send `/start` to me\\.*";
       if (fromUser.id.toString() === ownerUid) {
         // for owner only
         introduction += "\n" +
             "\n*The contents below are ONLY visible and valid for bot owner\\.*" +
+            "\n" +
+            "\n**>DELETE MESSAGE:" +
+            "\n>  I can delete both your messages and mine in the group since I have the necessary permissions\\." +
             "\n" +
             "\n*For Help*" +
             "\nThis bot is totally *open source* and *free* to use\\. You can mail to *vivalavida@linux\\.do* for getting help\\. " +
