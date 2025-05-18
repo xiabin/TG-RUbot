@@ -1,12 +1,12 @@
-# Open Wegram Bot - OWB
-## 一个让人呼吸顺畅的 Telegram 双向私聊机器人 🤖（零费用）
-### *LivegramBot 不死，战斗不止！*
-
-简体中文 | [English](README_EN.md) 
+简体中文 | [English](README_EN.md)
+# TG-RUbot: 最好的tg私信传话筒，无存储！零成本！消息隔离、emoji回应、拉黑、编辑、撤回
+#TG 聊天机器人 #TG 私聊机器人 #TG 私信机器人
 
 这是一个基于 Cloudflare Worker / Vercel 的 Telegram 双向私聊机器人，无需服务器、无需数据库、无需自己的域名即可轻松部署。
 
-用户可以通过您的机器人向您发送消息，您可以直接回复这些消息，实现双向通信。
+* TG 双向聊天机器人
+   * 别人发消息给它，它把消息转发给你
+   * 你发消息给它，它把消息复制给对应的人
 
 ## ✨ 特色功能
 
@@ -18,6 +18,112 @@
 - 🔒 **安全可靠** - 使用 Telegram 官方 API 和安全令牌
 - 🔌 **多机器人支持** - 一个部署可注册多个私聊机器人
 - 🛠️ **多种部署方式** - 支持 GitHub 一键部署、Vercel 一键部署、Wrangler CLI 和 Dashboard 部署
+- 🤖 **更强的RUbot模式** - 消息分离、对话拉黑、消息编辑、消息删除、emoji回应
+
+## 为什么需要它？
+
+* 据说直接私聊会被 tg 重点关注，容易封号，是不是这样我也不知道，但好玩的东西就玩一玩呗
+* 可以隐藏自己的本体账号，不被他人骚扰。
+* 机器人玩法更多样有趣，比如我就在我的机器人里塞了个月亮
+
+## 该怎么使用它？
+
+* 根据下文项目部署指南，自部署使用，推荐使用免费的 CF worker
+* 如果你是**LinuxDo 二级佬友**，[那么我提供完全免费且完全隐私安全的服务](https://linux.do/t/topic/620515)
+   * 基于 CF worker，免费额度，没有运行成本的公益服务
+   * 为什么要二级才行？
+      * 免费额度有限，10W 每天 (?)，虽然够很多人用，但我怕坏人捣乱
+      * 稍微给 L 站的账号增加一丢丢丢丢含金量🤏(?)
+     
+
+## 它和其他私聊机器人有什么异同？
+
+* 它是基于并在部署和使用上完全兼容 [open-wegram-bot](https://github.com/wozulong/open-wegram-bot)（蹭蹭始皇~~的项目~~）
+* 它保持了极高的易用性，小白亦可操作部署使用
+* 可以零运行成本使用
+   * 基于 cf worker 或 Vercel
+   * **无任何数据存储在 tg 之外**，完全无隐私担忧
+   * 你所需要的，只有一个 worker，即便是要多人使用子母模式，也只需要在加一个免费的 worker
+* 它提供了使用更友好的 **RUbot 模式**
+
+## RUbot 模式是什么？
+
+* 消息分离，与多个人私聊时，不会再像各说各话的群一样混乱了
+* 回复他人私信不再需要手动选择消息 replay，像原本私信一样，直接发送就好
+* 消息被机器人转发后，有 emoji 提示，再也不用担心对方因为转发失败收不到了
+* `/start` 呼出介绍信息
+   * 对来访者，只有功能介绍
+   * 对所属用户，在不同位置有不同的可用命令列表
+      * 与机器人的私聊中
+      * 私聊群组的 general topic 中
+      * 私聊群组的私聊 topic 中
+* 支持单向拉黑！（给对方上个沉默
+   * 对方发送的消息和点击的表情，不会转发到topic中
+   * 但自己在topic中发送的消息和点击的表情，会转发给对方
+* 支持双向 emoji reaction！就是给消息点表情！
+* 消息编辑
+   * 直接使用原生 tg 的编辑功能即可
+* 消息删除
+   * replay 需要删除的消息，并发送内容 `#del`，即可删除之前已被机器人转发过去对面的消息
+
+
+## 看看效果？
+
+惨，我只有一个 tg 号，没法展示那么全面。但它很简单，你可以直接部署或介入我提供的服务使用体验。
+
+## 那么，如何使用 RUbot 模式 ？
+
+先这样，再这样，然后那样，吧嗒！就行了！
+
+* 创建机器人
+* 机器人关联上服务
+* 创建与机器人的个人聊天
+* 创建一个群组作为私信群组并开启群组的 topic 功能
+* 把机器人加入群组并设置成管理员
+* 在群组 general Topic 输入命令 `.!pm_RUbot_doInit!.` 完成开启
+
+手把手视频版，我自己使用了folder，又多了一步“把群组加入folder”：
+https://www.youtube.com/embed/0WmkWLVDLRo?si=WzaxMwnkaa8BO9wg
+
+## 可用命令
+
+* 在**私聊群组的 general Topic** 中：
+   * `.!pm_RUbot_checkInit!.`：检查初始化情况，结果回复在**与机器人的个人聊天**中
+   * `.!pm_RUbot_doInit!.`：进行初始化设置，结果回复在**与机器人的个人聊天**中
+   * `.!pm_RUbot_doReset!.`：重制初始化设置，结果回复在**与机器人的个人聊天**中
+* 在**与机器人的个人聊天**中：
+   * `.!pm_RUbot_doReset!.`：重制初始化设置
+   * 拉黑是单向的（给对方上个沉默），即拉黑后
+* 在**私聊对应的 Topic** 中：
+   * `.!pm_RUbot_ban!.` ：拉黑发送命令所在的 topic ，不再转发对应聊天过来的消息，并且发消息告诉对方被 ban
+   * `.!pm_RUbot_unban!.`：取消拉黑发送命令所在的 topic ，并且发消息告诉对方被 unban
+   * `.!pm_RUbot_silent_ban!.`：与 `.!pm_RUbot_ban!.` 相同，但不给对方发消息提醒
+   * `.!pm_RUbot_silent_unban!.`：与 `.!pm_RUbot_unban!.` 相同，但不给对方发消息提醒
+
+## 注意！（FAQ）
+
+* 开启 RUbot 模式时的**命令**发送在**群组的 general Topic**，而机器人在**个人聊天**中回复结果
+* 使用 **原生个人号** 而不是频道 (channel) 在私信群组中发送消息和命令
+* 在 RUbot 模式下，你会看到在群组的 General Topic 和你自己和机器人的聊天有一个 `Pinned message`
+  不要随意修改它，**也不要新 pin 任何消息**，除非你清晰明白你在做什么有什么后果
+  它是**无存储**实现的关键！
+* 先给群组开启 topic 功能，开启完成后，再设置机器人为管理员，否则可能需要单独再设置一次 `Manage topics` 权限
+* 他人首次私信时，被私信人会收到来自机器人的通知，因为新建 topic 后发的第一条信息，tg 原生的通知不够友好醒目
+
+## todo list
+
+* ✅ 支持消息删除，回复需要删除的消息并发送 `#del`
+* ✅ 支持消息编辑
+* ✅ 支持 emoji 回应
+* ✅ 拉黑指定用户，不转发其私信
+* ✅ `/start` 呼出介绍
+* 新消息通知汇总（避免消息混乱，操作跳转和已读，可配置开启，比较复杂）
+
+## can't list
+* ~~支持已读通知~~（好像做不成，没通知，我也有点不太喜欢这个功能其实）
+* ~~通过 bot 主动私信他人~~（好像做不成，没法创建新的聊天）
+
+# 部署指南
 
 ## 🛠️ 前置要求
 
@@ -52,21 +158,22 @@
 
 这是最简单的部署方式，无需本地开发环境，直接通过 GitHub 仓库部署。
 
-1. Fork 或克隆本仓库到您的 GitHub 账户
+1. **Fork** 本仓库到您的 GitHub 账户
 2. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/)
 3. 导航到 **Workers & Pages** 部分
-4. 点击 **Create Application**
-5. 选择 **Connect to Git**
+4. 点击 **Create**
+5. 选择 **Import a repository**
 6. 授权 Cloudflare 访问您的 GitHub，并选择您 fork 的仓库
 7. 配置部署设置：
-   - **Project name**：设置您的项目名称（例如 `open-wegram-bot`）
+   - **Project name**：设置您的项目名称（例如 `tg-rubot`）
    - **Production branch**：选择主分支（通常是 `master`）
    - 其他设置保持默认
-8. 配置环境变量：
-   - 点击 **Environment Variables**
-   - 添加 `PREFIX`（例如：`public`）
-   - 添加 `SECRET_TOKEN`（必须包含大小写字母和数字，长度至少16位），并标记为**加密**
-9. 点击 **Save and Deploy** 按钮完成部署
+8. 点击 **Save and Deploy** 按钮完成部署
+9. 配置**运行时**环境变量：
+   - 进入到 worker 的 **Settings** 标签页
+   - 导航到 **Variables and Secrets**
+   - 添加类型为**Plaintext**的 `PREFIX`（例如：`public`）
+   - 添加类型为**Secret**的 `SECRET_TOKEN`（必须且只能包含大写和小写字母和数字，长度至少16位）
 
 这种方式的优点是：当您更新 GitHub 仓库时，Cloudflare 会自动重新部署您的 Worker。
 
@@ -164,18 +271,7 @@ https://open-wegram-bot.username.workers.dev/public/install/123456789/000000000:
 > [!NOTE]
 > 一个 Worker 实例可以注册多个不同的 Bot！只需重复上述注册步骤，使用不同的 Bot API Token 即可。
 
-## 📱 使用方法
 
-### 接收消息 📩
-
-一旦设置完成，任何人给您的 Bot 发送消息，您都会在自己的 Telegram 账号中收到这些消息，并且消息下方会显示发送者的信息。
-
-### 回复消息 📤
-
-要回复某个用户的消息：
-1. 在 Telegram 中找到您想回复的转发消息
-2. 直接回复该消息（使用 Telegram 的回复功能）
-3. 您的回复会被自动发送给原始发送者
 
 ### 卸载 Bot ❌
 
@@ -219,7 +315,7 @@ https://your-worker-url/YOUR_PREFIX/uninstall/BOT_API_TOKEN
 
 如果您有任何问题、建议或想贡献代码，请提 Issue/PR 或通过以下方式联系我：
 
-- [LINUX DO](https://linux.do)
+- [RUbot：最好的tg私信传话筒，无存储！零成本！消息隔离、emoji回应、拉黑、编辑、撤回 | 小打小闹](https://linux.do/t/topic/620510)
 
 ## 📄 许可证
 
@@ -227,4 +323,4 @@ https://your-worker-url/YOUR_PREFIX/uninstall/BOT_API_TOKEN
 
 ---
 
-希望这个工具能让您的 Telegram 私聊体验更加便捷！🎉 如果你只想直接使用，请访问 [@WegramBot](https://t.me/wegram_bot)
+希望这个工具能让您的 Telegram 私聊体验更加便捷！🎉 如果你只想直接使用，并且是LinuxDo二级佬友，请访问 [我提供的服务相关介绍](https://linux.do/t/topic/620515)
