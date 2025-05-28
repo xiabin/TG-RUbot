@@ -365,6 +365,29 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
     from_chat_id: fromChatId,
     message_id: pmMessageId,
   })).json();
+
+  function parseMdReserveWord(str) {
+    return str
+        .replaceAll("_", "\\_")
+        .replaceAll("*", "\\*")
+        .replaceAll("[", "\\[")
+        .replaceAll("]", "\\]")
+        .replaceAll("(", "\\(")
+        .replaceAll(")", "\\)")
+        .replaceAll("~", "\\~")
+        .replaceAll("`", "\\`")
+        .replaceAll(">", "\\>")
+        .replaceAll("#", "\\#")
+        .replaceAll("+", "\\+")
+        .replaceAll("-", "\\-")
+        .replaceAll("=", "\\=")
+        .replaceAll("|", "\\|")
+        .replaceAll("{", "\\{")
+        .replaceAll("}", "\\}")
+        .replaceAll(".", "\\.")
+        .replaceAll("!", "\\!");
+  }
+
   if (forwardMessageResp.ok) {
     const topicMessageId = forwardMessageResp.result.message_id;
     if (isNewTopic) {
@@ -374,13 +397,9 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
         messageLink = `https://t.me/c/${superGroupChatId.toString().substring(4)}/${topicId}/${topicMessageId}`
       }
       const text = `${messageLink
-          ? `New PM chat from ${fromChatName.replaceAll("(", "\\(")
-              .replaceAll(")", "\\)")
-              .replaceAll("-", "\\-")}` +
+          ? `New PM chat from ${(parseMdReserveWord(fromChatName))}` +
           `\n[Click the to view it in your SUPERGROUP](${messageLink})`
-          : `New PM chat from ${fromChatName.replaceAll("(", "\\(")
-              .replaceAll(")", "\\)")
-              .replaceAll("-", "\\-")}` +
+          : `New PM chat from ${(parseMdReserveWord(fromChatName))}` +
           `\nGo view it in your SUPERGROUP`}`
       const sendMessageResp = await (await postToTelegramApi(botToken, 'sendMessage', {
         chat_id: ownerUid,
@@ -389,9 +408,8 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
         link_preview_options: { is_disabled: true },
       })).json();
       if (!sendMessageResp.ok) {
-        // TODO: 2025/5/9 for parse_mode test
         await postToTelegramApi(botToken, 'sendMessage', {
-          chat_id: fromChat.id,
+          chat_id: ownerUid,
           message_thread_id: message.message_thread_id,
           text: `text: ${text} resp: ${JSON.stringify(sendMessageResp)}`,
         })
