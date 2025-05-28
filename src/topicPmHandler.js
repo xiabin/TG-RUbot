@@ -396,10 +396,11 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
       if (superGroupChatId.toString().startsWith("-100")) {
         messageLink = `https://t.me/c/${superGroupChatId.toString().substring(4)}/${topicId}/${topicMessageId}`
       }
+      const parsedFromChatName = parseMdReserveWord(fromChatName)
       const text = `${messageLink
-          ? `New PM chat from ${(parseMdReserveWord(fromChatName))}` +
+          ? `New PM chat from ${parsedFromChatName}` +
           `\n[Click the to view it in your SUPERGROUP](${messageLink})`
-          : `New PM chat from ${(parseMdReserveWord(fromChatName))}` +
+          : `New PM chat from ${parsedFromChatName}` +
           `\nGo view it in your SUPERGROUP`}`
       const sendMessageResp = await (await postToTelegramApi(botToken, 'sendMessage', {
         chat_id: ownerUid,
@@ -410,8 +411,7 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
       if (!sendMessageResp.ok) {
         await postToTelegramApi(botToken, 'sendMessage', {
           chat_id: ownerUid,
-          message_thread_id: message.message_thread_id,
-          text: `text: ${text} resp: ${JSON.stringify(sendMessageResp)}`,
+          text: `New PM chat notify error, text: ${text} resp: ${JSON.stringify(sendMessageResp)}`,
         })
       }
     }
