@@ -6,6 +6,7 @@ import {
   banTopic,
   checkInit,
   doCheckInit,
+  fixPinMessage,
   init,
   motherBotCommands,
   parseMetaDataMessage,
@@ -396,7 +397,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
           reaction: [{ type: "emoji", emoji: "🕊" }]
         });
       } else {
-        // TODO: 2025/5/9 for parse_mode test
+        // for parse_mode test
         await postToTelegramApi(botToken, 'sendMessage', {
           chat_id: fromChat.id,
           message_thread_id: message.message_thread_id,
@@ -430,7 +431,11 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
           await processPMSent(botToken, message, topicToFromChat);
         }
       } else {
-        if (message.text === "#del" && reply?.message_id && reply?.from.id === fromUser.id) {
+        // send message to bot via chat
+        if (message.text === "#fixpin" && reply?.message_id && fromUser.id.toString() === ownerUid) {
+          // fix pined message
+          await fixPinMessage(botToken, ownerUid, message, reply);
+        } else if (message.text === "#del" && reply?.message_id && reply?.from.id === fromUser.id) {
           // delete message
           if (!bannedTopics.includes(fromChatToTopic.get(fromChat.id))) {
             await processPMDeleteReceived(botToken, ownerUid, message, reply, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage);
@@ -444,6 +449,12 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
     }
 
     if (reply && fromChat.id.toString() === ownerUid) {
+      if (message.text === "#fixpin" && reply?.message_id && fromUser.id.toString() === ownerUid) {
+        // fix pined message
+        await fixPinMessage(botToken, ownerUid, message, reply);
+        return new Response('OK');
+      }
+
       const rm = reply.reply_markup;
       if (rm && rm.inline_keyboard && rm.inline_keyboard.length > 0) {
         let senderUid = rm.inline_keyboard[0][0].callback_data;

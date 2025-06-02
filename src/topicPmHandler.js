@@ -153,9 +153,39 @@ export async function doCheckInit(botToken, ownerUid, failedMessage, failed) {
   const checkMetaDataMessageResp = await (await postToTelegramApi(botToken, 'getChat', {
     chat_id: ownerUid,
   })).json();
+
+  async function updateDate(currentSeconds, dateSecondTimestamp, chatId, messageId, text) {
+    const dateDiff = currentSeconds - dateSecondTimestamp;
+    const days = Math.floor(dateDiff / 60 / 60 / 24);
+    if (days > 7) {
+      await postToTelegramApi(botToken, 'editMessageText', {
+        chat_id: chatId,
+        message_id: messageId,
+        text: `${text};-1:-1`,
+      });
+      await postToTelegramApi(botToken, 'editMessageText', {
+        chat_id: chatId,
+        message_id: messageId,
+        text: text,
+      });
+    }
+  }
+
   if (!checkMetaDataMessageResp.ok || !checkMetaDataMessageResp.result.pinned_message?.text) {
     failedMessage += " checkMetaDataMessageResp: " + JSON.stringify(checkMetaDataMessageResp);
     failed = true;
+  } else {
+    const chatId = checkMetaDataMessageResp.result.pinned_message.chat.id;
+    const messageId = checkMetaDataMessageResp.result.pinned_message.message_id
+    const text = checkMetaDataMessageResp.result.pinned_message.text;
+    const dateSecondTimestamp = checkMetaDataMessageResp.result.pinned_message.date;
+    const editDateSecondTimestamp = checkMetaDataMessageResp.result.pinned_message.edit_date;
+    const currentSeconds = Math.floor(Date.now() / 1000);
+    if (editDateSecondTimestamp) {
+      await updateDate(currentSeconds, editDateSecondTimestamp, chatId, messageId, text);
+    } else if (dateSecondTimestamp) {
+      await updateDate(currentSeconds, dateSecondTimestamp, chatId, messageId, text);
+    }
   }
   return { checkMetaDataMessageResp, failedMessage, failed };
 }
@@ -1024,4 +1054,28 @@ export async function unbanTopic(botToken, ownerUid, message, topicToFromChat, m
     text: `You have been UN-BANNED for sending messages!`,
   });
   return new Response('OK');
+}
+
+// ---------------------------------------- FIX SETTING ----------------------------------------
+
+export async function fixPinMessage(botToken, ownerUid, message, reply) {
+  const oldPinMsgId = reply.message_id;
+  const pinMsgText = reply.text;
+  const fromChatId = message.chat.id;
+
+  await postToTelegramApi(botToken, 'unpinChatMessage', {
+    chat_id: fromChatId,
+    message_id: oldPinMsgId,
+  });
+
+  const sendMessageResp = await (await postToTelegramApi(botToken, 'sendMessage', {
+    chat_id: fromChatId,
+    text: pinMsgText,
+  })).json();
+  if (sendMessageResp.ok) {
+    await postToTelegramApi(botToken, 'pinChatMessage', {
+      chat_id: fromChatId,
+      message_id: sendMessageResp.result.message_id,
+    });
+  }
 }
