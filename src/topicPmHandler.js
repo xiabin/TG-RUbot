@@ -186,6 +186,8 @@ export function parseMetaDataMessage(metaDataMessage) {
   const superGroupChatId = parseInt(metaDataSplit[0]);
   const topicToFromChat = new Map;
   const fromChatToTopic = new Map;
+  const topicToCommentName = new Map;
+  const fromChatToCommentName = new Map;
   const bannedTopics = [];
   if (metaDataSplit.length > 1) {
     for (let i = 1; i < metaDataSplit.length; i++) {
@@ -201,9 +203,13 @@ export function parseMetaDataMessage(metaDataMessage) {
       }
       topicToFromChat.set(topic, fromChat);
       fromChatToTopic.set(fromChat, topic);
+      if (topicToFromChatSplit[2]) {
+        topicToCommentName.set(topic, topicToFromChatSplit[2]);
+        fromChatToCommentName.set(fromChat, topicToFromChatSplit[2]);
+      }
     }
   }
-  return { superGroupChatId, topicToFromChat, fromChatToTopic, bannedTopics };
+  return { superGroupChatId, topicToFromChat, fromChatToTopic, bannedTopics, topicToCommentName, fromChatToCommentName };
 }
 
 async function addTopicToFromChatOnMetaData(botToken, metaDataMessage, ownerUid, topicId, fromChatId) {
@@ -319,16 +325,22 @@ export async function reset(botToken, ownerUid, message, inOwnerChat) {
 
 // ---------------------------------------- PRIVATE MESSAGE ----------------------------------------
 
-export async function processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage) {
+export async function processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage, fromChatToCommentName) {
   const fromChat = message.chat;
   const fromChatId = fromChat.id;
   const pmMessageId = message.message_id;
   let topicId = fromChatToTopic.get(fromChatId);
   let isNewTopic = false;
-
-  const fromChatName = fromChat.username ?
+  let commentName = fromChatToCommentName.get(fromChatId) ?
+      `${fromChatToCommentName.get(fromChatId)} | ` : '';
+  const maxTopicNameLen = 127;
+  const maxFromChatNameLen = maxTopicNameLen - (commentName.length + `${fromChatId}`.length + 6);
+  const maxCommentNameLen = maxTopicNameLen - (`${fromChatId}`.length + 6);
+  commentName = commentName.substring(0, maxCommentNameLen);
+  let fromChatName = fromChat.username ?
       `@${fromChat.username}` : [fromChat.first_name, fromChat.last_name].filter(Boolean).join(' ');
-  let topicName = `${fromChatName} ${fromChatId === message.from.id ? `(${fromChatId})` : `(${fromChatId})(${message.from.id})`}`
+  fromChatName = fromChatName.substring(0, maxFromChatNameLen);
+
   const lengthCheckDo = function (topicName, newTopicName) {
     if (topicName.length > 128) {
       return newTopicName;
@@ -336,9 +348,10 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
       return topicName;
     }
   }
-  topicName = lengthCheckDo(topicName, `${fromChatName} (${fromChatId})`);
-  topicName = lengthCheckDo(topicName, fromChatName);
-  topicName = lengthCheckDo(topicName, fromChatName.substring(0, 127));
+  let topicName = `${commentName}${fromChatName} ${fromChatId === message.from.id ? `(${fromChatId})` : `(${fromChatId})(${message.from.id})`}`;
+  topicName = lengthCheckDo(topicName, `${commentName}${fromChatName} (${fromChatId})`);
+  topicName = lengthCheckDo(topicName, `${commentName} (${fromChatId})`);
+  topicName = lengthCheckDo(topicName, `(${fromChatId})`.substring(0, maxTopicNameLen));
 
   if (!topicId) {
     const createTopicResp = await (await postToTelegramApi(botToken, 'createForumTopic', {
@@ -376,7 +389,7 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
     await cleanItemOnMetaData(botToken, metaDataMessage, ownerUid, topicId);
     fromChatToTopic.delete(fromChatId)
     // resend the message
-    return await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage)
+    return await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage, fromChatToCommentName)
   }
 
   // forwardMessage to topic
@@ -457,7 +470,7 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
     await cleanItemOnMetaData(botToken, metaDataMessage, ownerUid, topicId);
     fromChatToTopic.delete(fromChatId)
     // resend the message
-    return await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage)
+    return await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage, fromChatToCommentName)
   }
   return { success: false }
 }
@@ -700,9 +713,9 @@ async function sendEmojiReaction(botToken, targetChatId, targetMessageId, reacti
 
 // ---------------------------------------- EDIT MESSAGE ----------------------------------------
 
-export async function processPMEditReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage) {
+export async function processPMEditReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage, fromChatToCommentName) {
   const { success: isForwardSuccess, targetChatId, targetTopicId, originChatId, originMessageId, newMessageId } =
-      await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage)
+      await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage, fromChatToCommentName)
   if (isForwardSuccess) {
     const checkMessageConnectionMetaDataResp =
         await checkMessageConnectionMetaDataForAction(botToken, superGroupChatId,
@@ -1065,4 +1078,30 @@ export async function fixPinMessage(botToken, chatId, text, oldPinMsgId) {
       message_id: sendMessageResp.result.message_id,
     });
   }
+}
+
+// ---------------------------------------- TOPIC COMMENT NAME ----------------------------------------
+
+export async function processTopicCommentNameEdit(botToken, ownerUid, topicId, fromChatId, newTotalName, metaDataMessage) {
+  if (!newTotalName) return;
+  const oldText = metaDataMessage.text;
+  let commentName = newTotalName.includes('|') ?
+      newTotalName.split('|')[0].trim().replace(/[:;]/g, '') : '';
+
+  const escapeRegExp = str => {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  };
+
+  const checkRegex = new RegExp(`;${topicId}:b?${fromChatId}:${escapeRegExp(commentName)}(?:[;^])`, 'g');
+  const isMatch = checkRegex.test(oldText);
+  if (isMatch) {
+    return;
+  }
+  const replaceRegex = new RegExp(`;${topicId}:(b?)${fromChatId}(?::[^;]*)?`, 'g');
+  const newText = oldText.replace(replaceRegex, `;${topicId}:$1${fromChatId}:${commentName}`);
+  await postToTelegramApi(botToken, 'editMessageText', {
+    chat_id: ownerUid,
+    message_id: metaDataMessage.message_id,
+    text: newText,
+  });
 }

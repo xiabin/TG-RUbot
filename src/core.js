@@ -18,6 +18,7 @@ import {
   processPMEditSent,
   processPMReceived,
   processPMSent,
+  processTopicCommentNameEdit,
   reset,
   unbanTopic
 } from './topicPmHandler.js'
@@ -122,7 +123,9 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
           superGroupChatId,
           topicToFromChat,
           fromChatToTopic,
-          bannedTopics
+          bannedTopics,
+          topicToCommentName,
+          fromChatToCommentName
         } = parseMetaDataMessage(metaDataMessage);
         if (false) {
           // ignore message types
@@ -134,7 +137,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
         } else {
           // topic ER receive from others.
           if (!bannedTopics.includes(fromChatToTopic.get(fromChat.id))) {
-            await processPMEditReceived(botToken, ownerUid, messageEdited, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage)
+            await processPMEditReceived(botToken, ownerUid, messageEdited, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage, fromChatToCommentName)
           }
         }
         return new Response('OK');
@@ -165,7 +168,9 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
           superGroupChatId,
           topicToFromChat,
           fromChatToTopic,
-          bannedTopics
+          bannedTopics,
+          topicToCommentName,
+          fromChatToCommentName
         } = parseMetaDataMessage(metaDataMessage);
         if (false) {
           // ignore message types
@@ -228,7 +233,9 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
             superGroupChatId,
             topicToFromChat,
             fromChatToTopic,
-            bannedTopics
+            bannedTopics,
+            topicToCommentName,
+            fromChatToCommentName
           } = parseMetaDataMessage(metaDataMessage);
           if (fromChat.id !== superGroupChatId) {
             await postToTelegramApi(botToken, 'sendMessage', {
@@ -416,14 +423,26 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
         superGroupChatId,
         topicToFromChat,
         fromChatToTopic,
-        bannedTopics
+        bannedTopics,
+        topicToCommentName,
+        fromChatToCommentName
       } = parseMetaDataMessage(metaDataMessage);
       if (message.forum_topic_created || message.pinned_message) {
         // ignore message types
         return new Response('OK');
       } else if (fromUser.id.toString() === ownerUid && fromChat.id === superGroupChatId
           && fromChat.is_forum && message.is_topic_message) {
-        if (message.text === "#del" && reply?.message_id && reply?.from.id === fromUser.id && reply?.message_id !== message.message_thread_id) {
+        // send message in super group
+        if (message.forum_topic_edited?.name) {
+          // comment name for topic
+          await processTopicCommentNameEdit(
+              botToken,
+              ownerUid,
+              message.message_thread_id,
+              topicToFromChat.get(message.message_thread_id),
+              message.forum_topic_edited?.name,
+              metaDataMessage);
+        } else if (message.text === "#del" && reply?.message_id && reply?.from.id === fromUser.id && reply?.message_id !== message.message_thread_id) {
           // delete message
           await processPMDeleteSent(botToken, message, reply, superGroupChatId, topicToFromChat);
         } else {
@@ -432,7 +451,8 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
         }
       } else {
         // send message to bot via chat
-        if (message.text === "#fixpin" && reply?.message_id && fromUser.id.toString() === ownerUid) {
+        if (message.forum_topic_edited?.name) {
+        } else if (message.text === "#fixpin" && reply?.message_id && fromUser.id.toString() === ownerUid) {
           // fix pined message
           await fixPinMessage(botToken, message.chat.id, reply.text, reply.message_id);
         } else if (message.text === "#del" && reply?.message_id && reply?.from.id === fromUser.id) {
@@ -442,7 +462,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
           }
         } else {
           // topic PM receive from others. Always receive first.
-          await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage);
+          await processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage, fromChatToCommentName);
         }
       }
       return new Response('OK');
