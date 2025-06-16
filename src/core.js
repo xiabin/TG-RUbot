@@ -434,7 +434,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
         // send message to bot via chat
         if (message.text === "#fixpin" && reply?.message_id && fromUser.id.toString() === ownerUid) {
           // fix pined message
-          await fixPinMessage(botToken, ownerUid, message, reply);
+          await fixPinMessage(botToken, message.chat.id, reply.text, reply.message_id);
         } else if (message.text === "#del" && reply?.message_id && reply?.from.id === fromUser.id) {
           // delete message
           if (!bannedTopics.includes(fromChatToTopic.get(fromChat.id))) {
@@ -451,7 +451,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
     if (reply && fromChat.id.toString() === ownerUid) {
       if (message.text === "#fixpin" && reply?.message_id && fromUser.id.toString() === ownerUid) {
         // fix pined message
-        await fixPinMessage(botToken, ownerUid, message, reply);
+        await fixPinMessage(botToken, message.chat.id, reply.text, reply.message_id);
         return new Response('OK');
       }
 
