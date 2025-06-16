@@ -424,9 +424,61 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
 
   if (forwardMessageResp.ok) {
     const topicMessageId = forwardMessageResp.result.message_id;
+
+    // replay
+    const replayPmMsgId = message.reply_to_message?.message_id
+    if (replayPmMsgId) {
+      const checkMessageConnectionMetaDataResp =
+          await checkMessageConnectionMetaDataForAction(botToken, superGroupChatId,
+              `Can't find ORIGIN message for message EDITING.`, ownerUid);
+      let replayedMessageId;
+      const messageConnectionTextSplit = checkMessageConnectionMetaDataResp.metaDataMessageText?.split(';');
+      if (messageConnectionTextSplit) {
+        for (let i = 0; i < messageConnectionTextSplit.length; i++) {
+          const messageConnectionTextSplitSplit = messageConnectionTextSplit[i].split(':');
+          if (replayPmMsgId === parseInt(messageConnectionTextSplitSplit[1])) {
+            const topicMessageMetaData = messageConnectionTextSplitSplit[0];
+            const topicMessageMetaDataSplit = topicMessageMetaData.split('-');
+            replayedMessageId = parseInt(topicMessageMetaDataSplit[1]);
+            break;
+          }
+        }
+      }
+
+      let newMessageLink = `https://t.me/c/${superGroupChatId}/${topicId}/${topicMessageId}`;
+      if (superGroupChatId.toString().startsWith("-100")) {
+        newMessageLink = `https://t.me/c/${superGroupChatId.toString().substring(4)}/${topicId}/${topicMessageId}`;
+      }
+      let text = `*⬆️⬆️⬆️[REPLAY](${newMessageLink})⬆️⬆️⬆️*`;
+      const sendReplayMessageBody = {
+        chat_id: superGroupChatId,
+        message_thread_id: topicId,
+        text: text,
+        parse_mode: "MarkdownV2"
+      };
+      let sendMessageResp;
+      if (replayedMessageId) {
+        sendReplayMessageBody.reply_parameters = {
+          message_id: replayedMessageId,
+          chat_id: superGroupChatId
+        }
+        sendMessageResp = await (await postToTelegramApi(botToken, 'sendMessage', sendReplayMessageBody)).json();
+      }
+      if (!sendMessageResp || !sendMessageResp?.ok) {
+        sendReplayMessageBody.text += `\n*❎❎❎UNKNOWN❎❎❎*`;
+        if (message.reply_to_message.text) {
+          sendReplayMessageBody.text += `\n\`\`\`\n`;
+          sendReplayMessageBody.text += message.reply_to_message.text.substring(0, 32);
+          sendReplayMessageBody.text += `\n\`\`\``;
+        }
+        delete sendReplayMessageBody.reply_parameters;
+        await postToTelegramApi(botToken, 'sendMessage', sendReplayMessageBody)
+      }
+    }
+
     if (isNewTopic) {
       // send PM to bot owner for the bad notification on super group for first message
-      let messageLink;
+      let messageLink = `https://t.me/c/${superGroupChatId}/${topicId}/${topicMessageId}`;
       if (superGroupChatId.toString().startsWith("-100")) {
         messageLink = `https://t.me/c/${superGroupChatId.toString().substring(4)}/${topicId}/${topicMessageId}`
       }
@@ -475,17 +527,45 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
   return { success: false }
 }
 
-export async function processPMSent(botToken, message, topicToFromChat) {
+export async function processPMSent(botToken, message, topicToFromChat, noReplay) {
   const ownerUid = message.from.id;
   const topicId = message.message_thread_id;
   const superGroupChatId = message.chat.id;
   const topicMessageId = message.message_id;
   const pmChatId = topicToFromChat.get(message.message_thread_id)
-  const copyMessageResp = await (await postToTelegramApi(botToken, 'copyMessage', {
+
+  // replay
+  let replayPmMessageId;
+  if (!noReplay && message.reply_to_message && message.reply_to_message?.message_id !== topicId) {
+    const checkMessageConnectionMetaDataResp =
+        await checkMessageConnectionMetaDataForAction(botToken, superGroupChatId,
+            `Can't find TARGET message for sending message REPLAY.`, ownerUid);
+    if (!checkMessageConnectionMetaDataResp.failed) {
+      const messageConnectionTextSplit = checkMessageConnectionMetaDataResp.metaDataMessageText.split(';').reverse();
+      for (let i = 0; i < messageConnectionTextSplit.length; i++) {
+        const messageConnectionTextSplitSplit = messageConnectionTextSplit[i].split(':');
+        const topicMessageMetaData = messageConnectionTextSplitSplit[0];
+        const topicMessageMetaDataSplit = topicMessageMetaData.split('-');
+        if (message.reply_to_message?.message_id === parseInt(topicMessageMetaDataSplit[1])) {
+          replayPmMessageId = messageConnectionTextSplitSplit[1];
+          break;
+        }
+      }
+    }
+  }
+
+  const copyMessageBody = {
     chat_id: pmChatId,
     from_chat_id: superGroupChatId,
     message_id: topicMessageId
-  })).json();
+  };
+  if (replayPmMessageId) {
+    copyMessageBody.reply_parameters = {
+      message_id: replayPmMessageId,
+      chat_id: pmChatId
+    }
+  }
+  const copyMessageResp = await (await postToTelegramApi(botToken, 'copyMessage', copyMessageBody)).json();
   if (copyMessageResp.ok) {
     const pmMessageId = copyMessageResp.result.message_id
     // save messageId connection to group pin message
@@ -496,6 +576,8 @@ export async function processPMSent(botToken, message, topicToFromChat) {
       message_id: topicMessageId,
       reaction: [{ type: "emoji", emoji: "🕊" }]
     });
+  } else if (copyMessageResp.description.includes("message to be replied not found") || copyMessageResp.description.includes("repl")) {
+    await processPMSent(botToken, message, topicToFromChat, true);
   } else {
     await postToTelegramApi(botToken, 'sendMessage', {
       chat_id: ownerUid,
@@ -770,7 +852,7 @@ export async function processPMEditSent(botToken, message, superGroupChatId, top
 
   const checkMessageConnectionMetaDataResp =
       await checkMessageConnectionMetaDataForAction(botToken, superGroupChatId,
-          `Can't find TARGET message for sent message editing.`, ownerUid);
+          `Can't find TARGET message for sending message editing.`, ownerUid);
   if (checkMessageConnectionMetaDataResp.failed) return;
 
   const messageConnectionTextSplit = checkMessageConnectionMetaDataResp.metaDataMessageText.split(';').reverse();
@@ -792,7 +874,7 @@ export async function processPMEditSent(botToken, message, superGroupChatId, top
     await postToTelegramApi(botToken, 'sendMessage', {
       chat_id: superGroupChatId,
       message_thread_id: topicId,
-      text: `Can't find TARGET message for sent [message](${oldMessageLink}) EDITING\\.`,
+      text: `Can't find TARGET message for sending [message](${oldMessageLink}) EDITING\\.`,
       parse_mode: "MarkdownV2",
     });
     return;
@@ -896,7 +978,7 @@ export async function processPMDeleteSent(botToken, message, reply, superGroupCh
 
   const checkMessageConnectionMetaDataResp =
       await checkMessageConnectionMetaDataForAction(botToken, superGroupChatId,
-          `Can't find TARGET message for sent message DELETING.`, ownerUid);
+          `Can't find TARGET message for sending message DELETING.`, ownerUid);
   if (checkMessageConnectionMetaDataResp.failed) return;
 
   const messageConnectionTextSplit = checkMessageConnectionMetaDataResp.metaDataMessageText.split(';').reverse();
@@ -918,7 +1000,7 @@ export async function processPMDeleteSent(botToken, message, reply, superGroupCh
     await postToTelegramApi(botToken, 'sendMessage', {
       chat_id: superGroupChatId,
       message_thread_id: topicId,
-      text: `Can't find TARGET message for sent [message](${originMessageLink}) DELETING\\.`,
+      text: `Can't find TARGET message for sending [message](${originMessageLink}) DELETING\\.`,
       parse_mode: "MarkdownV2",
     });
     return;
