@@ -325,8 +325,31 @@ export async function reset(botToken, ownerUid, message, inOwnerChat) {
 
 // ---------------------------------------- PRIVATE MESSAGE ----------------------------------------
 
+function parseMdReserveWord(str) {
+  return str
+      .replaceAll("_", "\\_")
+      .replaceAll("*", "\\*")
+      .replaceAll("[", "\\[")
+      .replaceAll("]", "\\]")
+      .replaceAll("(", "\\(")
+      .replaceAll(")", "\\)")
+      .replaceAll("~", "\\~")
+      .replaceAll("`", "\\`")
+      .replaceAll(">", "\\>")
+      .replaceAll("#", "\\#")
+      .replaceAll("+", "\\+")
+      .replaceAll("-", "\\-")
+      .replaceAll("=", "\\=")
+      .replaceAll("|", "\\|")
+      .replaceAll("{", "\\{")
+      .replaceAll("}", "\\}")
+      .replaceAll(".", "\\.")
+      .replaceAll("!", "\\!");
+}
+
 export async function processPMReceived(botToken, ownerUid, message, superGroupChatId, fromChatToTopic, bannedTopics, metaDataMessage, fromChatToCommentName) {
   const fromChat = message.chat;
+  const fromUserId = message.from.id;
   const fromChatId = fromChat.id;
   const pmMessageId = message.message_id;
   let topicId = fromChatToTopic.get(fromChatId);
@@ -349,7 +372,7 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
       return topicName;
     }
   }
-  let topicName = `${commentName}${fromChatName} ${fromChatId === message.from.id ? `(${fromChatId})` : `(${fromChatId})(${message.from.id})`}`;
+  let topicName = `${commentName}${fromChatName} ${fromChatId === fromUserId ? `(${fromChatId})` : `(${fromChatId})(${fromUserId})`}`;
   topicName = lengthCheckDo(topicName, `${commentName}${fromChatName} (${fromChatId})`);
   topicName = lengthCheckDo(topicName, `${commentName} (${fromChatId})`);
   topicName = lengthCheckDo(topicName, `(${fromChatId})`.substring(0, maxTopicNameLen));
@@ -401,28 +424,6 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
     message_id: pmMessageId,
   })).json();
 
-  function parseMdReserveWord(str) {
-    return str
-        .replaceAll("_", "\\_")
-        .replaceAll("*", "\\*")
-        .replaceAll("[", "\\[")
-        .replaceAll("]", "\\]")
-        .replaceAll("(", "\\(")
-        .replaceAll(")", "\\)")
-        .replaceAll("~", "\\~")
-        .replaceAll("`", "\\`")
-        .replaceAll(">", "\\>")
-        .replaceAll("#", "\\#")
-        .replaceAll("+", "\\+")
-        .replaceAll("-", "\\-")
-        .replaceAll("=", "\\=")
-        .replaceAll("|", "\\|")
-        .replaceAll("{", "\\{")
-        .replaceAll("}", "\\}")
-        .replaceAll(".", "\\.")
-        .replaceAll("!", "\\!");
-  }
-
   if (forwardMessageResp.ok) {
     const topicMessageId = forwardMessageResp.result.message_id;
 
@@ -466,13 +467,19 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
         sendMessageResp = await (await postToTelegramApi(botToken, 'sendMessage', sendReplayMessageBody)).json();
       }
       if (!sendMessageResp || !sendMessageResp?.ok) {
-        sendReplayMessageBody.text += `\n*❎❎❎UNKNOWN❎❎❎*`;
+        delete sendReplayMessageBody.reply_parameters;
+        const isReplaySender = message.reply_to_message?.from.id === fromUserId;
+        sendReplayMessageBody.text = `*⬆️⬆️⬆️[REPLAY](${newMessageLink})`;
+        sendReplayMessageBody.text += isReplaySender ? ` MINE⬇️⬇️⬇️*` : ` YOURS⬇️⬇️⬇️*`;
         if (message.reply_to_message.text) {
           sendReplayMessageBody.text += `\n\`\`\`\n`;
-          sendReplayMessageBody.text += message.reply_to_message.text.substring(0, 32);
+          sendReplayMessageBody.text += message.reply_to_message.text
+              .substring(0, 128)
+              .replace(/`/g, '\\`');
           sendReplayMessageBody.text += `\n\`\`\``;
+        } else {
+          sendReplayMessageBody.text += `\n*❎❎❎UNKNOWN❎❎❎*`;
         }
-        delete sendReplayMessageBody.reply_parameters;
         await postToTelegramApi(botToken, 'sendMessage', sendReplayMessageBody)
       }
     }
@@ -537,7 +544,9 @@ export async function processPMSent(botToken, message, topicToFromChat, noReplay
 
   // replay
   let replayPmMessageId;
+  let replayText;
   if (!noReplay && message.reply_to_message && message.reply_to_message?.message_id !== topicId) {
+    replayText = message.reply_to_message?.text;
     const checkMessageConnectionMetaDataResp =
         await checkMessageConnectionMetaDataForAction(botToken, superGroupChatId,
             `Can't find TARGET message for sending message REPLAY.`, ownerUid);
@@ -571,6 +580,22 @@ export async function processPMSent(botToken, message, topicToFromChat, noReplay
     const pmMessageId = copyMessageResp.result.message_id
     // save messageId connection to group pin message
     await saveMessageConnection(botToken, superGroupChatId, topicId, topicMessageId, pmMessageId, ownerUid);
+    // send replay message
+    if (!replayPmMessageId && replayText) {
+      let sendReplayText = `*⬆️⬆️⬆️REPLAY`;
+      const isReplaySender = message.reply_to_message?.from.id === ownerUid;
+      sendReplayText += isReplaySender ? ` MINE⬇️⬇️⬇️*` : ` YOURS⬇️⬇️⬇️*`;
+      const replayTextLines = replayText.split('\n');
+      for (const replayTextLine of replayTextLines) {
+        sendReplayText += `\n>${parseMdReserveWord(replayTextLine)}`;
+      }
+      await postToTelegramApi(botToken, 'sendMessage', {
+        chat_id: pmChatId,
+        text: sendReplayText,
+        parse_mode: "MarkdownV2",
+        link_preview_options: { is_disabled: true },
+      })
+    }
     // notify sending status by MessageReaction
     await postToTelegramApi(botToken, 'setMessageReaction', {
       chat_id: superGroupChatId,
