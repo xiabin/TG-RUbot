@@ -340,6 +340,7 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
   let fromChatName = fromChat.username ?
       `@${fromChat.username}` : [fromChat.first_name, fromChat.last_name].filter(Boolean).join(' ');
   fromChatName = fromChatName.substring(0, maxFromChatNameLen);
+  fromChatName = fromChatName.replace(/\|/g, '｜');
 
   const lengthCheckDo = function (topicName, newTopicName) {
     if (topicName.length > 128) {
