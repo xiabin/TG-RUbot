@@ -1,4 +1,10 @@
 import { allowed_updates, postToTelegramApi } from './core';
+import dayjs from 'dayjs';
+import timezone from 'dayjs/plugin/timezone';
+import utc from 'dayjs/plugin/utc';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 // ---------------------------------------- MOTHER BOT ----------------------------------------
 
@@ -471,6 +477,12 @@ export async function processPMReceived(botToken, ownerUid, message, superGroupC
         const isReplaySender = message.reply_to_message?.from.id === fromUserId;
         sendReplayMessageBody.text = `*⬆️⬆️⬆️[REPLAY](${newMessageLink})`;
         sendReplayMessageBody.text += isReplaySender ? ` MINE⬇️⬇️⬇️*` : ` YOURS⬇️⬇️⬇️*`;
+        if (message.reply_to_message?.date) {
+          const formatted = dayjs.unix(message.reply_to_message?.date)
+              .tz('Asia/Shanghai')
+              .format('YYYY-MM-DD HH:mm:ss');
+          sendReplayMessageBody.text += `\n*${parseMdReserveWord(formatted)}*`;
+        }
         if (message.reply_to_message.text) {
           sendReplayMessageBody.text += `\n\`\`\`\n`;
           sendReplayMessageBody.text += message.reply_to_message.text
@@ -585,6 +597,12 @@ export async function processPMSent(botToken, message, topicToFromChat, noReplay
       let sendReplayText = `*⬆️⬆️⬆️REPLAY`;
       const isReplaySender = message.reply_to_message?.from.id === ownerUid;
       sendReplayText += isReplaySender ? ` MINE⬇️⬇️⬇️*` : ` YOURS⬇️⬇️⬇️*`;
+      if (message.reply_to_message?.date) {
+        const formatted = dayjs.unix(message.reply_to_message?.date)
+            .tz('Asia/Shanghai')
+            .format('YYYY-MM-DD HH:mm:ss');
+        sendReplayText += `\n*${parseMdReserveWord(formatted)}*`;
+      }
       const replayTextLines = replayText.split('\n');
       for (const replayTextLine of replayTextLines) {
         sendReplayText += `\n>${parseMdReserveWord(replayTextLine)}`;
