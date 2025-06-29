@@ -63,8 +63,9 @@
 * 支持双向 emoji reaction！就是给消息点表情！
 * 消息编辑
    * 直接使用原生 tg 的编辑功能即可
-* 消息删除
+* 消息删除（机器人主人功能）
    * replay 需要删除的消息，并发送内容 `#del`，即可删除之前已被机器人转发过去对面的消息
+   * 在话题中发送 `#delall` 可以批量删除当前话题的所有消息（包括双向消息）
 * 消息引用
    * 只需要像原生 tg 一样引用即可，可以引用自己的消息也可以引用对方的消息，转发时都会去引用在对应聊天中的对应消息
 * 备注名称
@@ -87,7 +88,7 @@
 * 把机器人加入群组并设置成管理员
 * 在群组 general Topic 输入命令 `.!pm_RUbot_doInit!.` 完成开启
 
-手把手视频版，我自己使用了folder，又多了一步“把群组加入folder”：
+手把手视频版，我自己使用了folder，又多了一步"把群组加入folder"：
 https://www.youtube.com/embed/0WmkWLVDLRo?si=WzaxMwnkaa8BO9wg
 
 ## 可用命令
@@ -104,6 +105,9 @@ https://www.youtube.com/embed/0WmkWLVDLRo?si=WzaxMwnkaa8BO9wg
    * `.!pm_RUbot_unban!.`：取消拉黑发送命令所在的 topic ，并且发消息告诉对方被 unban
    * `.!pm_RUbot_silent_ban!.`：与 `.!pm_RUbot_ban!.` 相同，但不给对方发消息提醒
    * `.!pm_RUbot_silent_unban!.`：与 `.!pm_RUbot_unban!.` 相同，但不给对方发消息提醒
+   * `#delall`：批量删除当前话题的所有消息（仅机器人主人可用）
+* 在**任意聊天**中：
+   * `#del`：回复要删除的消息并发送此命令，删除机器人转发的对应消息
 
 ## 注意！（FAQ）
 
@@ -127,6 +131,7 @@ https://www.youtube.com/embed/0WmkWLVDLRo?si=WzaxMwnkaa8BO9wg
 ## todo list
 
 * ✅ 支持消息删除，回复需要删除的消息并发送 `#del`
+* ✅ 支持批量删除，在话题中发送 `#delall` 删除所有消息
 * ✅ 支持消息编辑
 * ✅ 支持 emoji 回应
 * ✅ 拉黑指定用户，不转发其私信

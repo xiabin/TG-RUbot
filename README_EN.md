@@ -18,6 +18,7 @@ Users can send messages to you through your bot, and you can reply directly to t
 - 🔒 **Secure and Reliable** - Uses official Telegram API and secure tokens
 - 🔌 **Multiple Bot Support** - Register multiple private chat bots with a single deployment
 - 🛠️ **Multiple Deployment Options** - GitHub one-click deploy, Vercel one-click deploy, Wrangler CLI, and Dashboard deployment
+- 🗑️ **Message Management** - Support for deleting individual messages and batch deletion of topic messages
 
 ## 🛠️ Prerequisites
 
@@ -173,6 +174,17 @@ To reply to a user's message:
 2. Reply directly to that message (using Telegram's reply function)
 3. Your reply will be automatically sent to the original sender
 
+### Deleting Messages 🗑️ (Bot Owner Only)
+
+**Single Message Deletion:**
+- Reply to the message you want to delete and send `#del`
+- The bot will delete the corresponding forwarded message
+
+**Batch Deletion:**
+- Send `#delall` in a topic to delete all messages in that topic
+- This will delete both incoming and outgoing messages in the topic
+- Useful for clearing conversation history with a specific user
+
 ### Uninstalling the Bot ❌
 
 If you want to uninstall the Bot, visit the following URL (replace with your parameters):
@@ -207,6 +219,8 @@ If you anticipate higher usage, consider upgrading to Cloudflare's paid plan.
 - **Messages not forwarded**: Ensure the Bot is correctly registered and check the Worker logs
 - **Cannot access registration URL**: Try using a custom domain to solve access issues
 - **Reply message fails**: Check if you're correctly using Telegram's reply function
+- **Message deletion fails**: Ensure you're replying to the correct message when using `#del`, and that the bot has permission to delete messages
+- **Batch deletion not working**: Only the bot owner can use `#delall`, and it only works in topic chats
 - **Registration fails**: Ensure your `SECRET_TOKEN` meets the requirements (contains uppercase and lowercase letters and numbers, at least 16 characters long)
 - **GitHub deployment fails**: Check if your environment variables are correctly set and repository permissions are correct
 - **Worker deployment fails**: Check your Wrangler configuration and ensure you're logged in to Cloudflare
