@@ -14,6 +14,7 @@ import {
   processERSent,
   processPMDeleteReceived,
   processPMDeleteSent,
+  processPMDeleteAllSent,
   processPMEditReceived,
   processPMEditSent,
   processPMReceived,
@@ -308,6 +309,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
             "\n" +
             "\n**>删除消息:**" +
             "\n>  如果我有相应权限，我可以在群组中删除你和我的消息\\." +
+            "\n>  在话题中发送 `#delall` 可以批量删除当前话题的所有消息\\." +
             "\n" +
             "\n*获取帮助*" +
             "\n这个机器人完全*开源*且*免费*使用\\. 如需帮助请邮件联系 *vivalavida@linux\\.do*\\. " +
@@ -441,6 +443,9 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
         } else if (message.text === "#del" && reply?.message_id && reply?.from.id === fromUser.id && reply?.message_id !== message.message_thread_id) {
           // delete message
           await processPMDeleteSent(botToken, message, reply, superGroupChatId, topicToFromChat);
+        } else if (message.text === "#delall") {
+          // delete all messages in current topic
+          await processPMDeleteAllSent(botToken, message, superGroupChatId, topicToFromChat);
         } else {
           // topic PM send to others
           await processPMSent(botToken, message, topicToFromChat);

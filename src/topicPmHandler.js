@@ -1123,6 +1123,203 @@ async function notifyMessageDeleteForward(botToken, fromChatId, fromMessageId, c
   }
 }
 
+// ---------------------------------------- DELETE ALL MESSAGES ----------------------------------------
+
+async function getAllTopicMappings(botToken, superGroupChatId, targetTopicId) {
+  const checkMessageConnectionMetaDataResp = await checkMessageConnectionMetaData(
+      botToken, superGroupChatId, "无法获取消息映射关系。");
+  
+  if (checkMessageConnectionMetaDataResp.failed || !checkMessageConnectionMetaDataResp.metaDataMessageText) {
+    return [];
+  }
+
+  const mappings = [];
+  const messageConnectionTextSplit = checkMessageConnectionMetaDataResp.metaDataMessageText.split(';');
+
+  for (const connection of messageConnectionTextSplit) {
+    if (!connection.trim()) continue;
+    
+    const connectionParts = connection.split(':');
+    if (connectionParts.length !== 2) continue;
+    
+    const topicPart = connectionParts[0];
+    const pmMessageId = connectionParts[1];
+    
+    const topicParts = topicPart.split('-');
+    if (topicParts.length !== 2) continue;
+    
+    const topicId = parseInt(topicParts[0]);
+    const topicMessageId = parseInt(topicParts[1]);
+    const pmMsgId = parseInt(pmMessageId);
+    
+    if (topicId === targetTopicId && !isNaN(topicMessageId) && !isNaN(pmMsgId)) {
+      mappings.push({
+        topicId: topicId,
+        topicMessageId: topicMessageId,
+        pmMessageId: pmMsgId
+      });
+    }
+  }
+
+  return mappings;
+}
+
+async function cleanAllTopicMappingsFromMetaData(botToken, superGroupChatId, targetTopicId, ownerUid) {
+  const checkMessageConnectionMetaDataResp = await checkMessageConnectionMetaData(
+      botToken, superGroupChatId, "无法清理映射关系。");
+  
+  if (checkMessageConnectionMetaDataResp.failed) {
+    return { success: false };
+  }
+
+  const oldText = checkMessageConnectionMetaDataResp.metaDataMessageText;
+  const messageConnectionTextSplit = oldText.split(';');
+  
+  // 过滤掉目标话题的所有映射关系
+  const filteredConnections = messageConnectionTextSplit.filter(connection => {
+    if (!connection.trim()) return false;
+    
+    const connectionParts = connection.split(':');
+    if (connectionParts.length !== 2) return true;
+    
+    const topicPart = connectionParts[0];
+    const topicParts = topicPart.split('-');
+    if (topicParts.length !== 2) return true;
+    
+    const topicId = parseInt(topicParts[0]);
+    return topicId !== targetTopicId;
+  });
+
+  const newText = filteredConnections.join(';');
+  
+  try {
+    const editMessageTextResp = await (await postToTelegramApi(botToken, 'editMessageText', {
+      chat_id: superGroupChatId,
+      message_id: checkMessageConnectionMetaDataResp.metaDataMessageId,
+      text: newText,
+    })).json();
+    
+    return { success: editMessageTextResp.ok };
+  } catch (error) {
+    return { success: false };
+  }
+}
+
+export async function processPMDeleteAllSent(botToken, message, superGroupChatId, topicToFromChat) {
+  const ownerUid = message.from.id;
+  const commandMessageId = message.message_id;
+  const topicId = message.message_thread_id;
+  const pmChatId = topicToFromChat.get(topicId);
+
+  if (!pmChatId) {
+    await postToTelegramApi(botToken, 'sendMessage', {
+      chat_id: superGroupChatId,
+      message_thread_id: topicId,
+      text: `找不到对应的私聊用户，无法执行批量删除！`,
+    });
+    return;
+  }
+
+  // 发送开始提示
+  const startMessageResp = await (await postToTelegramApi(botToken, 'sendMessage', {
+    chat_id: superGroupChatId,
+    message_thread_id: topicId,
+    text: `开始批量删除当前话题的所有消息...`,
+  })).json();
+
+  // 获取该话题的所有映射关系
+  const mappings = await getAllTopicMappings(botToken, superGroupChatId, topicId);
+  
+  if (mappings.length === 0) {
+    await postToTelegramApi(botToken, 'editMessageText', {
+      chat_id: superGroupChatId,
+      message_id: startMessageResp.result.message_id,
+      text: `当前话题没有找到可删除的消息映射关系！`,
+    });
+    return;
+  }
+
+  let deletedCount = 0;
+  let failedCount = 0;
+  const totalCount = mappings.length;
+
+  // 批量删除消息
+  for (let i = 0; i < mappings.length; i++) {
+    const mapping = mappings[i];
+    let topicDeleted = false;
+    let pmDeleted = false;
+
+    try {
+      // 删除话题中的消息
+      const deleteTopicMessageResp = await (await postToTelegramApi(botToken, 'deleteMessage', {
+        chat_id: superGroupChatId,
+        message_id: mapping.topicMessageId,
+      })).json();
+      topicDeleted = deleteTopicMessageResp.ok;
+    } catch (error) {
+      // 忽略删除失败的情况
+    }
+
+    try {
+      // 删除私聊中的消息
+      const deletePmMessageResp = await (await postToTelegramApi(botToken, 'deleteMessage', {
+        chat_id: pmChatId,
+        message_id: mapping.pmMessageId,
+      })).json();
+      pmDeleted = deletePmMessageResp.ok;
+    } catch (error) {
+      // 忽略删除失败的情况
+    }
+
+    if (topicDeleted || pmDeleted) {
+      deletedCount++;
+    } else {
+      failedCount++;
+    }
+
+    // 每删除10条消息更新一次进度
+    if ((i + 1) % 10 === 0 || i === mappings.length - 1) {
+      await postToTelegramApi(botToken, 'editMessageText', {
+        chat_id: superGroupChatId,
+        message_id: startMessageResp.result.message_id,
+        text: `正在批量删除消息... ${i + 1}/${totalCount}\n` +
+              `已删除: ${deletedCount} 条\n` +
+              `失败: ${failedCount} 条`,
+      });
+    }
+
+    // 避免API速率限制，每条消息之间暂停100ms
+    if (i < mappings.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+
+  // 清理置顶消息中的映射关系
+  const cleanResult = await cleanAllTopicMappingsFromMetaData(botToken, superGroupChatId, topicId, ownerUid);
+
+  // 发送完成通知
+  const finalText = `✅ 批量删除完成！\n\n` +
+                   `📊 统计信息：\n` +
+                   `• 总共处理: ${totalCount} 条消息\n` +
+                   `• 成功删除: ${deletedCount} 条\n` +
+                   `• 删除失败: ${failedCount} 条\n` +
+                   `• 映射清理: ${cleanResult.success ? '成功' : '失败'}\n\n` +
+                   `🗑️ 当前话题的消息映射关系已清理，新消息将重新建立映射关系。`;
+
+  await postToTelegramApi(botToken, 'editMessageText', {
+    chat_id: superGroupChatId,
+    message_id: startMessageResp.result.message_id,
+    text: finalText,
+  });
+
+  // 给命令消息添加 🗿 表情反馈
+  await postToTelegramApi(botToken, 'setMessageReaction', {
+    chat_id: superGroupChatId,
+    message_id: commandMessageId,
+    reaction: [{ type: "emoji", emoji: "🗿" }]
+  });
+}
+
 // ---------------------------------------- BAN TOPIC ----------------------------------------
 
 export async function banTopic(botToken, ownerUid, message, topicToFromChat, metaDataMessage, isSilent) {
