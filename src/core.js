@@ -48,7 +48,7 @@ export async function handleInstall(request, ownerUid, botToken, prefix, secretT
   if (!validateSecretToken(secretToken)) {
     return jsonResponse({
       success: false,
-      message: 'Secret token must be at least 16 characters and contain uppercase letters, lowercase letters, and numbers.'
+      message: '密钥令牌必须至少16个字符，并包含大写字母、小写字母和数字。'
     }, 400);
   }
 
@@ -65,12 +65,12 @@ export async function handleInstall(request, ownerUid, botToken, prefix, secretT
 
     const result = await response.json();
     if (result.ok) {
-      return jsonResponse({ success: true, message: 'Webhook successfully installed.' });
+      return jsonResponse({ success: true, message: 'Webhook 安装成功。' });
     }
 
-    return jsonResponse({ success: false, message: `Failed to install webhook: ${result.description}` }, 400);
+    return jsonResponse({ success: false, message: `Webhook 安装失败：${result.description}` }, 400);
   } catch (error) {
-    return jsonResponse({ success: false, message: `Error installing webhook: ${error.message}` }, 500);
+    return jsonResponse({ success: false, message: `安装 Webhook 时出错：${error.message}` }, 500);
   }
 }
 
@@ -78,7 +78,7 @@ export async function handleUninstall(botToken, secretToken) {
   if (!validateSecretToken(secretToken)) {
     return jsonResponse({
       success: false,
-      message: 'Secret token must be at least 16 characters and contain uppercase letters, lowercase letters, and numbers.'
+      message: '密钥令牌必须至少16个字符，并包含大写字母、小写字母和数字。'
     }, 400);
   }
 
@@ -87,18 +87,18 @@ export async function handleUninstall(botToken, secretToken) {
 
     const result = await response.json();
     if (result.ok) {
-      return jsonResponse({ success: true, message: 'Webhook successfully uninstalled.' });
+      return jsonResponse({ success: true, message: 'Webhook 卸载成功。' });
     }
 
-    return jsonResponse({ success: false, message: `Failed to uninstall webhook: ${result.description}` }, 400);
+    return jsonResponse({ success: false, message: `Webhook 卸载失败：${result.description}` }, 400);
   } catch (error) {
-    return jsonResponse({ success: false, message: `Error uninstalling webhook: ${error.message}` }, 500);
+    return jsonResponse({ success: false, message: `卸载 Webhook 时出错：${error.message}` }, 500);
   }
 }
 
 export async function handleWebhook(request, ownerUid, botToken, secretToken, childBotUrl, childBotSecretToken) {
   if (secretToken !== request.headers.get('X-Telegram-Bot-Api-Secret-Token')) {
-    return new Response('Unauthorized', { status: 401 });
+    return new Response('未授权', { status: 401 });
   }
 
   const update = await request.json();
@@ -147,7 +147,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
       // --- for debugging ---
       await postToTelegramApi(botToken, 'sendMessage', {
         chat_id: ownerUid,
-        text: `Error! You can send the message to developer for getting help : ${error.message} Stack: ${error.stack} origin: ${JSON.stringify(update)}`,
+        text: `出错了！你可以把这条消息发给开发者寻求帮助：${error.message} 堆栈：${error.stack} 原始数据：${JSON.stringify(update)}`,
       });
       // --- for debugging ---
       return new Response('OK');
@@ -192,7 +192,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
       // --- for debugging ---
       await postToTelegramApi(botToken, 'sendMessage', {
         chat_id: ownerUid,
-        text: `Error! You can send the message to developer for getting help : ${error.message} Stack: ${error.stack} origin: ${JSON.stringify(update)}`,
+        text: `出错了！你可以把这条消息发给开发者寻求帮助：${error.message} 堆栈：${error.stack} 原始数据：${JSON.stringify(update)}`,
       });
       // --- for debugging ---
       return new Response('OK');
@@ -240,7 +240,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
           if (fromChat.id !== superGroupChatId) {
             await postToTelegramApi(botToken, 'sendMessage', {
               chat_id: fromChat.id,
-              text: `Only can work in your PM super group`,
+              text: `只能在你的私信超级群组中使用`,
             });
             return new Response('OK');
           }
@@ -267,7 +267,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
     // --- for debugging ---
     await postToTelegramApi(botToken, 'sendMessage', {
       chat_id: ownerUid,
-      text: `Error! You can send the message to developer for getting help : ${error.message} Stack: ${error.stack} origin: ${JSON.stringify(update)}`,
+      text: `出错了！你可以把这条消息发给开发者寻求帮助：${error.message} 堆栈：${error.stack} 原始数据：${JSON.stringify(update)}`,
     });
     // --- for debugging ---
     return new Response('OK');
@@ -277,116 +277,112 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
   try {
     if ("/start" === message.text) {
       // Introduction words for various scenarios
-      let introduction = "*Welcome\\!*" +
-          "\n>I'm a PM bot\\." +
-          "\n>I'll forward your messages to my owner, and vice versa\\." +
-          "\n*There are some details below:*" +
-          "\n**>EMOJI REACTION:" +
-          "\n>  The emoji reaction 🕊 as seen below this message, indicates a successful forward\\." +
-          "\n>  If you don't see that, the message hasn't been forwarded\\." +
+      let introduction = "*欢迎使用\\!*" +
+          "\n>我是一个私信转发机器人\\." +
+          "\n>我会将你的消息转发给我的主人，主人的回复也会转发给你\\." +
+          "\n*以下是详细使用说明:*" +
+          "\n**>表情反应:**" +
+          "\n>  你会在本消息下方看到 🕊 表情，表示转发成功\\." +
+          "\n>  如果没有看到，说明消息没有被转发\\." +
           "\n>" +
-          "\n>  You can tap other emoji reaction for both your and my messages\\(except this one\\), and I'll forward it as well\\." +
-          "\n>  But as a bot, limited by TG, I can only send ONE FREE emoji reaction for each message\\." +
-          "\n>  So that if you're a tg\\-premium\\-user and tap many emoji reactions for one message\\. I'll only forward the last one if it's a free emoji\\.||" +
-          "\n**>EDIT MESSAGE:" +
-          "\n>  You can edit your message as usual, but ONLY TEXT message for now\\. " +
-          "If forward success, the emoji reaction 🦄 will swiftly appear and revert to 🕊 after about 1s\\." +
-          "\n>  If you don't see that, the EDITING hasn't been forwarded\\." +
-          "\n>  Perhaps you miss seeing that, you can try edit AGAIN with DIFFERENT CONTENT\\.||" +
-          "\n**>DELETE MESSAGE:" +
-          "\n>  You can delete your messages I forwarded by REPLYING the origin message and TYPING `#del` to me\\." +
-          " No additional process is needed\\." +
-          "\n>  But I can only delete my own messages, not yours\\. So, you need to delete the messages for yourself," +
-          " include \\[origin message\\] \\[command message\\] and \\[notify message\\]\\.||" +
+          "\n>  你可以给我们的消息添加其他表情（除了这条说明），我也会帮你转发\\." +
+          "\n>  但是作为机器人，受 Telegram 限制，每条消息我只能免费转发一个表情\\." +
+          "\n>  如果你是会员用户并且给同一条消息添加了多个表情，我只会转发最后一个免费表情\\.||" +
+          "\n**>编辑消息:**" +
+          "\n>  你可以正常编辑你的消息，但目前只支持文本消息\\. " +
+          "如果编辑转发成功，🦄 表情会快速出现，大约1秒后恢复为 🕊\\." +
+          "\n>  如果没看到这个反馈，说明编辑没有被转发\\." +
+          "\n>  如果错过了反馈，可以尝试再次编辑并修改内容\\.||" +
+          "\n**>删除消息:**" +
+          "\n>  你可以删除我转发的消息：回复要删除的原消息，然后发送 `#del` 给我\\." +
+          " 就这么简单\\." +
+          "\n>  但我只能删除我发送的消息，你的消息需要你自己删除，" +
+          "包括 \\[原消息\\]、\\[删除命令\\] 和 \\[通知消息\\]\\.||" +
           "\n" +
-          "\n*If you want to see this message again,*" +
-          "\n*Send `/start` to me\\.*";
+          "\n*如果想再次查看这个说明，*" +
+          "\n*发送 `/start` 给我就可以了\\.*";
       if (fromUser.id.toString() === ownerUid) {
         // for owner only
         introduction += "\n" +
-            "\n*The contents below are ONLY visible and valid for bot owner\\.*" +
+            "\n*以下内容仅机器人主人可见*" +
             "\n" +
-            "\n**>DELETE MESSAGE:" +
-            "\n>  I can delete both your messages and mine in the group since I have the necessary permissions\\." +
+            "\n**>删除消息:**" +
+            "\n>  如果我有相应权限，我可以在群组中删除你和我的消息\\." +
             "\n" +
-            "\n*For Help*" +
-            "\nThis bot is totally *open source* and *free* to use\\. You can mail to *vivalavida@linux\\.do* for getting help\\. " +
-            "\nOr you can connect on [Linux Do](https://linux.do/t/topic/620510?u=ru_sirius)\\." +
+            "\n*获取帮助*" +
+            "\n这个机器人完全*开源*且*免费*使用\\. 如需帮助请邮件联系 *vivalavida@linux\\.do*\\. " +
+            "\n也可以访问 [Linux Do 社区](https://linux.do/t/topic/620510?u=ru_sirius)\\." +
             "\n";
         if (fromChat.is_forum && message.is_topic_message) {
           // commands in PM topic
           introduction +=
-              "\n*Commands in other places:*" +
-              "\nIn a personal chat with the bot:" +
+              "\n*其他地方可用的命令:*" +
+              "\n在机器人私聊中:" +
               "\n`.!pm_RUbot_doReset!.`" +
-              "\nIn the general topic of the PM chat super group:" +
+              "\n在私信超级群的总话题中:" +
               "\n`.!pm_RUbot_checkInit!.`" +
               "\n`.!pm_RUbot_doInit!.`" +
               "\n`.!pm_RUbot_doReset!.`" +
               "\n" +
-              "\n*Valid commands in here:*" +
-              "\n*BAN THIS TOPIC*" +
+              "\n*当前话题可用命令:*" +
+              "\n*屏蔽此话题*" +
               "\n➡️`.!pm_RUbot_ban!.`⬅️" +
-              "\n↗️*Press or Click to copy:*⬆️" +
-              "\n**>DESCRIPTION:" +
-              "\n>Block the topic where the command was sent," +
-              " stop forwarding messages from the corresponding chat," +
-              " and send a message to inform the other party that they have been banned\\.||" +
+              "\n↗️*点击复制*⬆️" +
+              "\n**>说明:" +
+              "\n>屏蔽当前话题，停止转发该聊天的消息，并通知对方已被屏蔽\\.||" +
               "\n➡️`.!pm_RUbot_unban!.`⬅️" +
-              "\n↗️*Press or Click to copy:*⬆️" +
-              "\n**>DESCRIPTION:" +
-              "\n>Unblock the topic where the command was sent," +
-              " and send a message to inform the other party that they have been unbanned\\.||" +
+              "\n↗️*点击复制*⬆️" +
+              "\n**>说明:" +
+              "\n>取消屏蔽当前话题，并通知对方已解除屏蔽\\.||" +
               "\n➡️`.!pm_RUbot_silent_ban!.`⬅️" +
-              "\n↗️*Press or Click to copy:*⬆️" +
-              "\n**>DESCRIPTION:" +
-              "\n>Block the topic where the command was sent\\." +
-              " stop forwarding messages from the corresponding chat\\.||" +
+              "\n↗️*点击复制*⬆️" +
+              "\n**>说明:" +
+              "\n>静默屏蔽当前话题，仅停止转发该聊天的消息\\.||" +
               "\n➡️`.!pm_RUbot_silent_unban!.`⬅️" +
-              "\n↗️*Press or Click to copy:*⬆️" +
-              "\n**>DESCRIPTION:" +
-              "\n>Unblock the topic where the command was sent\\.||";
+              "\n↗️*点击复制*⬆️" +
+              "\n**>说明:" +
+              "\n>取消静默屏蔽当前话题\\.||";
         } else if (fromChat.is_forum) {
           // commands in General topic
           introduction +=
-              "\n*Commands in other places:*" +
-              "\nIn a personal chat with the bot:" +
+              "\n*其他地方可用的命令:*" +
+              "\n在机器人私聊中:" +
               "\n`.!pm_RUbot_doReset!.`" +
-              "\nIn the corresponding PM chat Topic:" +
+              "\n在对应的私信话题中:" +
               "\n`.!pm_RUbot_ban!.`" +
               "\n`.!pm_RUbot_unban!.`" +
               "\n`.!pm_RUbot_silent_ban!.`" +
               "\n`.!pm_RUbot_silent_unban!.`" +
               "\n" +
-              "\n*Valid commands in here:*" +
+              "\n*当前话题可用命令:*" +
               "\n➡️`.!pm_RUbot_checkInit!.`⬅️" +
-              "\n↗️*Press or Click to copy:*⬆️" +
-              "\n>Check the initialization status, and the result reply is in the personal chat with the robot\\." +
+              "\n↗️*点击复制*⬆️" +
+              "\n>检查初始化状态，结果会在与机器人的私聊中显示\\." +
               "\n➡️`.!pm_RUbot_doInit!.`⬅️" +
-              "\n↗️*Press or Click to copy:*⬆️" +
-              "\n>Perform initial settings, and the result reply is in the personal chat with the robot\\." +
+              "\n↗️*点击复制*⬆️" +
+              "\n>执行初始化设置，结果会在与机器人的私聊中显示\\." +
               "\n➡️`.!pm_RUbot_doReset!.`⬅️" +
-              "\n↗️*Press or Click to copy:*⬆️" +
-              "\n>Reset the settings, and the result reply is in the personal chat with the robot\\." +
+              "\n↗️*点击复制*⬆️" +
+              "\n>重置所有设置，结果会在与机器人的私聊中显示\\." +
               "\n";
         } else {
           // commands in bot chat
           introduction +=
-              "\n*Commands in other places:*" +
-              "\nIn the general topic of the PM chat super group:" +
+              "\n*其他地方可用的命令:*" +
+              "\n在私信超级群的总话题中:" +
               "\n`.!pm_RUbot_checkInit!.`" +
               "\n`.!pm_RUbot_doInit!.`" +
               "\n`.!pm_RUbot_doReset!.`" +
-              "\nIn the corresponding PM chat Topic:" +
+              "\n在对应的私信话题中:" +
               "\n`.!pm_RUbot_ban!.`" +
               "\n`.!pm_RUbot_unban!.`" +
               "\n`.!pm_RUbot_silent_ban!.`" +
               "\n`.!pm_RUbot_silent_unban!.`" +
               "\n " +
-              "\n*Valid commands in here:*" +
+              "\n*当前可用命令:*" +
               "\n➡️`.!pm_RUbot_doReset!.`⬅️" +
-              "\n↗️*Press or Click to copy:*⬆️" +
-              "\n>Reset the settings\\." +
+              "\n↗️*点击复制*⬆️" +
+              "\n>重置所有设置\\." +
               "\n";
         }
       }
@@ -408,7 +404,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
         await postToTelegramApi(botToken, 'sendMessage', {
           chat_id: fromChat.id,
           message_thread_id: message.message_thread_id,
-          text: `resp: ${JSON.stringify(sendMessageResp)}`,
+          text: `响应: ${JSON.stringify(sendMessageResp)}`,
         })
       }
       return new Response('OK');
@@ -498,12 +494,12 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
 
     const copyMessage = async function (withUrl = false) {
       const ik = [[{
-        text: `🔏 From: ${senderName} (${senderUid})`,
+        text: `🔏 来自: ${senderName} (${senderUid})`,
         callback_data: senderUid,
       }]];
 
       if (withUrl) {
-        ik[0][0].text = `🔓 From: ${senderName} (${senderUid})`
+        ik[0][0].text = `🔓 来自: ${senderName} (${senderUid})`
         ik[0][0].url = `tg://user?id=${senderUid}`;
       }
 
@@ -525,7 +521,7 @@ export async function handleWebhook(request, ownerUid, botToken, secretToken, ch
     // --- for debugging ---
     await postToTelegramApi(botToken, 'sendMessage', {
       chat_id: ownerUid,
-      text: `Error! You can send the message to developer for getting help : ${error.message} Stack: ${error.stack} origin: ${JSON.stringify(update)}`,
+      text: `出错了！你可以把这条消息发给开发者寻求帮助：${error.message} 堆栈：${error.stack} 原始数据：${JSON.stringify(update)}`,
     });
     // --- for debugging ---
     return new Response('OK');
@@ -556,5 +552,5 @@ export async function handleRequest(request, config) {
     return handleWebhook(request, match[1], match[2], secretToken, childBotUrl, childBotSecretToken);
   }
 
-  return new Response('Not Found', { status: 404 });
+  return new Response('页面未找到', { status: 404 });
 }
